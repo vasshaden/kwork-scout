@@ -1,0 +1,168 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "model": "nvidia/nemotron-3-ultra-free",
+  "small_model": "nvidia/nemotron-3-ultra-free",
+
+  "permission": {
+    "*": "allow",
+    "bash": {
+      "*": "ask",
+      "python3 *": "allow",
+      "curl *": "allow",
+      "ls *": "allow",
+      "test *": "allow",
+      "stat *": "allow",
+      "mkdir *": "allow",
+      "cat *": "ask"
+    },
+    "edit": "allow",
+    "external_directory": "ask",
+    "skill": {
+      "*": "allow",
+      "internal-*": "deny"
+    }
+  },
+
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/orchestrator.txt}",
+      "permission": {
+        "bash": {
+          "*": "allow",
+          "source .env": "deny",
+          "cat .env": "deny",
+          "cat /home/*/.env": "deny",
+          "printenv *KWORK*": "deny",
+          "env | grep *KWORK*": "deny",
+          "cat cookies.txt": "deny",
+          "head cookies.txt": "deny",
+          "tail cookies.txt": "deny",
+          "grep * cookies.txt": "deny",
+          "awk * cookies.txt": "deny",
+          "sed * cookies.txt": "deny"
+        },
+        "read": {
+          "*": "allow",
+          "cookies.txt": "deny",
+          ".env": "deny"
+        },
+        "edit": "allow",
+        "task": { "*": "allow", "kwork-*": "allow" }
+      }
+    },
+
+    "kwork-parser": {
+      "description": "Парсит проекты с kwork.ru по одной логической категории. В live-режиме вызывает tools/kwork_live_parse.py через bash (Playwright обходит антибот SmartCaptcha). В dry-режиме читает tests/kwork-sample.html. Единственный агент, имеющий право читать cookies.txt в live-режиме (v2.1+).",
+      "mode": "subagent",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/parser.txt}",
+      "permission": {
+        "bash": {
+          "*": "allow"
+        },
+        "read": "allow",
+        "webfetch": "allow",
+        "grep": "deny",
+        "glob": "deny",
+        "edit": "deny",
+        "write": "deny"
+      }
+    },
+
+    "kwork-analyzer": {
+      "description": "Фильтрует проекты по навыкам, дедуплицирует, считает предварительный скор 1-10. Не генерирует КП и не пишет в data/.",
+      "mode": "subagent",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/analyzer.txt}",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "bash": "deny",
+        "webfetch": "deny",
+        "edit": "deny",
+        "write": "deny"
+      }
+    },
+
+    "kwork-scorer": {
+      "description": "Считает финальный скор 1-100 по scoring_weights и verdict (apply/review/skip). Не оценивает client.risk и не пишет в data/.",
+      "mode": "subagent",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/scorer.txt}",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "bash": "deny",
+        "webfetch": "deny",
+        "edit": "deny",
+        "write": "deny"
+      }
+    },
+
+    "kwork-client-analyst": {
+      "description": "Оценивает client.risk ∈ {low, medium, high, unknown} по YAML::client_quality_thresholds. Только для verdict ∈ {apply, review}.",
+      "mode": "subagent",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/client-analyst.txt}",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "bash": "deny",
+        "webfetch": "deny",
+        "edit": "deny",
+        "write": "deny"
+      }
+    },
+
+    "kwork-proposal-writer": {
+      "description": "Генерирует КП (≤1500 симв) с самокоррекцией (≤2 итерации). Только verdict=apply ∧ risk≠high. Модель: Nemotron 3 Ultra Free.",
+      "mode": "subagent",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/proposal-writer.txt}",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "write": {
+          "*": "deny",
+          "proposals/*": "allow",
+          "logs/proposal_writer_*.json": "allow"
+        },
+        "edit": "deny",
+        "bash": "deny",
+        "webfetch": "deny"
+      }
+    },
+
+    "kwork-history-keeper": {
+      "description": "Атомарная запись data/history.json + data/rejected.json за один запуск. Финальная дедупликация по project.id. Модель: Nemotron 3 Ultra Free.",
+      "mode": "subagent",
+      "model": "nvidia/nemotron-3-ultra-free",
+      "prompt": "{file:./prompts/history-keeper.txt}",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "write": {
+          "*": "deny",
+          "data/history.json": "allow",
+          "data/history.json.tmp": "allow",
+          "data/rejected.json": "allow",
+          "data/rejected.json.tmp": "allow",
+          "logs/history_keeper_*.json": "allow"
+        },
+        "edit": "deny",
+        "bash": "deny",
+        "webfetch": "deny"
+      }
+    }
+  },
+
+  "skills": { "paths": [".opencode/skills/"] }
+}

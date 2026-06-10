@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kwork Scout — Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+    .status-pending  { background: #334155; color: #94a3b8; }
+    .status-running  { background: #1e3a5f; color: #60a5fa; animation: pulse 1.5s infinite; }
+    .status-completed{ background: #14532d; color: #4ade80; }
+    .status-failed   { background: #7f1d1d; color: #f87171; }
+    .status-error    { background: #7f1d1d; color: #f87171; }
+    @keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:0.6 } }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1rem; }
+    .metric-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+                   border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; text-align: center; }
+    .metric-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .metric-label { font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem; }
+    pre.logs { background: #0c0c14; border: 1px solid #334155; border-radius: 8px;
+               padding: 0.75rem; font-size: 0.75rem; max-height: 350px; overflow-y: auto;
+               white-space: pre-wrap; word-break: break-word; font-family: 'Fira Code', monospace; }
+    select { background: #1e293b; border: 1px solid #475569; color: #e2e8f0;
+             border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .dot-green  { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+    .dot-yellow { background: #facc15; box-shadow: 0 0 6px #facc15; animation: pulse 1.5s infinite; }
+    .dot-gray   { background: #64748b; }
+    .dot-red    { background: #f87171; box-shadow: 0 0 6px #f87171; }
+    .dot-blue   { background: #60a5fa; box-shadow: 0 0 6px #60a5fa; animation: pulse 1.5s infinite; }
+    .project-row:hover { background: #1e3a5f22; }
+    .tab-btn { padding: 0.5rem 1rem; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 0.85rem;
+               background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-bottom: none; }
+    .tab-btn.active { background: #0f172a; color: #e2e8f0; border-bottom: 1px solid #0f172a; }
+    .mermaid { background: transparent !important; }
+    .sse-elt { display: none; }
+    #connection-status { position: fixed; top: 12px; right: 12px; z-index: 999;
+                         padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Connection badge -->
+  <div id="connection-status" class="status-pending">
+    <span id="conn-text">⏳ Connecting...</span>
+  </div>
+
+  <div class="max-w-[1400px] mx-auto px-4 py-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold">Kwork Scout Monitor</h1>
+        <div id="header-info" class="text-sm text-slate-400 mt-1">
+          Ожидание запуска пайплайна...
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-slate-400">История:</label>
+        <select id="run-select" onchange="loadRun(this.value)">
+          <option value="">Текущий запуск</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Pipeline Graph -->
+    <div class="card mb-6" id="pipeline-card">
+      <h2 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wide">Пайплайн</h2>
+      <div class="mermaid" id="pipeline-graph">
+        graph LR
+          P1[Parser<br/>telegram_bots] --> A[Analyzer]
+          P2[Parser<br/>microservices] --> A
+          P3[Parser<br/>content_creation] --> A
+          A --> S[Scorer]
+          S --> CA[Client Analyst]
+          S --> PW[Proposal Writer]
+          CA --> HK[History Keeper]
+          PW --> HK
+          HK --> R[Report]
+          classDef pending fill:#334155,stroke:#64748b,color:#94a3b8
+          classDef running fill:#1e3a5f,stroke:#60a5fa,color:#60a5fa
+          classDef completed fill:#14532d,stroke:#4ade80,color:#4ade80
+          classDef failed fill:#7f1d1d,stroke:#f87171,color:#f87171
+          class P1,P2,P3,A,S,CA,PW,HK,R pending
+      </div>
+    </div>
+
+    <!-- Metrics Row -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" id="metrics-row">
+      <div class="metric-card">
+        <div class="metric-value text-blue-400" id="m-total">0</div>
+        <div class="metric-label">Всего проектов</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value text-green-400" id="m-apply">0</div>
+        <div class="metric-label">Apply</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value text-yellow-400" id="m-review">0</div>
+        <div class="metric-label">Review</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value text-red-400" id="m-skip">0</div>
+        <div class="metric-label">Skip</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value text-purple-400" id="m-score">—</div>
+        <div class="metric-label">Avg Score</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value text-emerald-400" id="m-cost">$0.00</div>
+        <div class="metric-label">Бюджет</div>
+      </div>
+    </div>
+
+    <!-- Steps list -->
+    <div class="card mb-6" id="steps-card">
+      <h2 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wide">Шаги пайплайна</h2>
+      <div id="steps-list" class="space-y-2">
+        <div class="text-slate-500 text-sm">Ожидание запуска...</div>
+      </div>
+    </div>
+
+    <!-- Tabs: Projects / Logs -->
+    <div class="flex gap-0 mb-0">
+      <button class="tab-btn active" onclick="switchTab('projects')">Проекты</button>
+      <button class="tab-btn" onclick="switchTab('logs')">Логи агентов</button>
+      <button class="tab-btn" onclick="switchTab('errors')">Ошибки</button>
+    </div>
+
+    <!-- Projects Tab -->
+    <div id="tab-projects" class="card rounded-tl-none">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-2 px-2">ID</th>
+              <th class="text-left py-2 px-2">Название</th>
+              <th class="text-right py-2 px-2">Бюджет</th>
+              <th class="text-left py-2 px-2">Категория</th>
+              <th class="text-center py-2 px-2">Score</th>
+              <th class="text-center py-2 px-2">Verdict</th>
+              <th class="text-center py-2 px-2">Risk</th>
+              <th class="text-center py-2 px-2">КП</th>
+            </tr>
+          </thead>
+          <tbody id="projects-tbody">
+            <tr><td colspan="8" class="text-center py-4 text-slate-500">Ожидание данных...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Logs Tab (hidden) -->
+    <div id="tab-logs" class="card rounded-tl-none hidden">
+      <div id="logs-content" class="logs">Ожидание логов...</div>
+    </div>
+
+    <!-- Errors Tab (hidden) -->
+    <div id="tab-errors" class="card rounded-tl-none hidden">
+      <div id="errors-content">
+        <div class="text-slate-500 text-sm">Ошибок нет</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-slate-600 text-xs mt-8">
+      Kwork Scout Monitor v1.0 &middot; SSE polling: <span id="poll-interval">0.5</span>s &middot;
+      Last update: <span id="last-update">—</span>
+    </div>
+
+  </div>
+
+  <!-- SSE hidden element (triggers HTMX swaps) -->
+  <div id="sse-target"
+       hx-ext="sse"
+       sse-connect="/api/events"
+       sse-swap="status"
+       hx-trigger="sse:message from:body"
+       hx-swap="none"
+       class="sse-elt"></div>
+
+<script>
+  // ============================================================
+  // State
+  // ============================================================
+  let currentData = null;
+  let runHistory = [];
+  let viewingHistory = false; // true когда смотрим исторический запуск
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: {
+    primaryColor: '#1e293b', primaryTextColor: '#e2e8f0',
+    lineColor: '#475569', primaryBorderColor: '#64748b'
+  }});
+
+  // ============================================================
+  // Tab switching
+  // ============================================================
+  function switchTab(tab) {
+    ['projects','logs','errors'].forEach(t => {
+      document.getElementById('tab-'+t).classList.toggle('hidden', t !== tab);
+    });
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.toggle('active', b.textContent.toLowerCase().includes(
+        tab === 'projects' ? 'проект' : tab === 'logs' ? 'лог' : 'ошибк'
+      ));
+    });
+  }
+
+  // ============================================================
+  // SSE handler
+  // ============================================================
+  document.body.addEventListener('sse:message', function(evt) {
+    try {
+      const data = JSON.parse(evt.detail.data);
+      updateUI(data);
+      document.getElementById('conn-text').textContent = '🟢 Connected';
+      document.getElementById('connection-status').className = 'status-completed';
+    } catch(e) { console.error('SSE parse error', e); }
+  });
+
+  // Fallback: polling every 2s if SSE fails
+  let sseFailed = false;
+  setTimeout(() => {
+    if (!currentData) {
+      sseFailed = true;
+      document.getElementById('conn-text').textContent = '🟡 Polling mode';
+      document.getElementById('connection-status').className = 'status-running';
+      setInterval(() => fetchStatus(), 2000);
+    }
+  }, 5000);
+
+  async function fetchStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const data = await r.json();
+      updateUI(data);
+    } catch(e) { console.error('Poll error', e); }
+  }
+
+  // ============================================================
+  // Load history on start
+  // ============================================================
+  async function loadHistory() {
+    try {
+      const r = await fetch('/api/history');
+      runHistory = await r.json();
+      const sel = document.getElementById('run-select');
+      const currentValue = sel.value; // сохраняем текущий выбор
+      sel.innerHTML = '<option value="">Текущий запуск</option>';
+      runHistory.forEach(run => {
+        const opt = document.createElement('option');
+        opt.value = run.run_id;
+        opt.textContent = run.run_id + ' (' + (run.ok_steps||0) + '/' + (run.total_steps||0) + ' steps)';
+        sel.appendChild(opt);
+      });
+      // восстанавливаем выбор, если он есть в новом списке
+      if (currentValue && [...sel.options].some(o => o.value === currentValue)) {
+        sel.value = currentValue;
+      }
+    } catch(e) { console.error('History load error', e); }
+  }
+
+  async function loadRun(runId) {
+    if (!runId) { 
+      viewingHistory = false;
+      fetchStatus(); 
+      return; 
+    }
+    viewingHistory = true;
+    try {
+      const r = await fetch('/api/runs/' + runId);
+      const data = await r.json();
+      updateUI(data);
+    } catch(e) { console.error('Run load error', e); }
+  }
+
+  // ============================================================
+  // Main UI updater
+  // ============================================================
+  function updateUI(data) {
+    currentData = data;
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+    // Header
+    const started = data.started_at ? new Date(data.started_at).toLocaleString() : '—';
+    const elapsed = data.started_at ? Math.round((Date.now() - new Date(data.started_at).getTime()) / 1000) : 0;
+    const elapsedStr = elapsed > 60 ? Math.floor(elapsed/60) + 'м ' + (elapsed%60) + 'с' : elapsed + 'с';
+    document.getElementById('header-info').innerHTML =
+      `<span class="font-mono text-blue-400">${data.run_id || '—'}</span>` +
+      ` &middot; Mode: <strong>${data._dry_run !== false ? 'dry_run' : 'live'}</strong>` +
+      ` &middot; Started: ${started}` +
+      ` &middot; Elapsed: <strong>${elapsedStr}</strong>` +
+      ` &middot; Categories: ${(data.categories||[]).join(', ') || '—'}`;
+
+    // Metrics
+    const agg = data.aggregated || {};
+    document.getElementById('m-total').textContent  = agg.projects_total ?? '—';
+    document.getElementById('m-apply').textContent   = agg.apply ?? 0;
+    document.getElementById('m-review').textContent  = agg.review ?? 0;
+    document.getElementById('m-skip').textContent    = agg.skip ?? 0;
+    document.getElementById('m-score').textContent   = agg.avg_score != null ? agg.avg_score.toFixed(1) : '—';
+
+    // Total budget (sum of all project budgets in RUB)
+    const totalBudget = (data.projects || []).reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
+    document.getElementById('m-cost').textContent = totalBudget.toLocaleString('ru-RU') + ' ₽';
+
+    // Steps
+    renderSteps(data.steps || []);
+
+    // Pipeline graph coloring
+    updateGraph(data.steps || []);
+
+    // Projects table
+    renderProjects(data.projects || [], data.steps || []);
+
+    // Logs
+    renderLogs(data.steps || []);
+
+    // Errors
+    renderErrors(data.errors || []);
+
+    // Refresh history dropdown
+    loadHistory();
+  }
+
+  // ============================================================
+  // Render steps
+  // ============================================================
+  function renderSteps(steps) {
+    const el = document.getElementById('steps-list');
+    if (!steps.length) { el.innerHTML = '<div class="text-slate-500 text-sm">Ожидание запуска...</div>'; return; }
+    el.innerHTML = steps.map((s, i) => {
+      const statusMap = {
+        pending:   { dot: 'dot-gray',   label: 'Ожидает' },
+        running:   { dot: 'dot-blue',   label: 'Выполняется' },
+        completed: { dot: 'dot-green',  label: 'Завершён' },
+        failed:    { dot: 'dot-red',    label: 'Ошибка' },
+        error:     { dot: 'dot-red',    label: 'Ошибка' },
+      };
+      const st = statusMap[s.status] || statusMap.pending;
+      const dur = s.duration != null ? ` (${s.duration.toFixed(1)}с)` : '';
+      const summary = s.output_summary ? ` — ${s.output_summary}` : '';
+      const err = s.error ? `<span class="text-red-400 ml-2">⚠ ${s.error}</span>` : '';
+      return `<div class="flex items-center gap-2 text-sm py-1">
+        <span class="dot ${st.dot}"></span>
+        <span class="text-slate-400 w-8">${i+1}.</span>
+        <span class="font-medium">${s.name}</span>
+        <span class="text-slate-500">— ${st.label}${dur}</span>
+        <span class="text-slate-400">${summary}</span>
+        ${err}
+      </div>`;
+    }).join('');
+  }
+
+  // ============================================================
+  // Color the mermaid graph
+  // ============================================================
+  const graphNodeMap = {
+    'parser(telegram_bots)': 'P1', 'parser(microservices)': 'P2',
+    'parser(content_creation)': 'P3', 'analyzer': 'A', 'scorer': 'S',
+    'client-analyst': 'CA', 'proposal-writer': 'PW',
+    'history-keeper': 'HK', 'report': 'R'
+  };
+
+  function updateGraph(steps) {
+    // Reset all to pending first
+    document.querySelectorAll('.mermaid .node').forEach(n => {
+      n.classList.remove('completed','running','failed');
+    });
+    steps.forEach(s => {
+      const nodeId = graphNodeMap[s.name];
+      if (!nodeId) return;
+      const el = document.querySelector(`.mermaid #${nodeId}`);
+      if (!el) return;
+      const parent = el.closest('.node') || el;
+      if (s.status === 'completed') parent.classList.add('completed');
+      else if (s.status === 'running') parent.classList.add('running');
+      else if (s.status === 'failed' || s.status === 'error') parent.classList.add('failed');
+    });
+  }
+
+  // ============================================================
+  // Render projects table
+  // ============================================================
+  function renderProjects(projects, steps) {
+    const tbody = document.getElementById('projects-tbody');
+    if (!projects.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-slate-500">Нет проектов</td></tr>';
+      return;
+    }
+    tbody.innerHTML = projects.map(p => {
+      const verdictColors = { apply: 'text-green-400', review: 'text-yellow-400', skip: 'text-red-400' };
+      const riskColors = { low: 'text-green-400', medium: 'text-yellow-400', high: 'text-red-400', unknown: 'text-slate-500' };
+      const verdictIcons = { apply: '🟢', review: '🟡', skip: '🔴' };
+      const budget = p.budget != null ? p.budget.toLocaleString() + ' ₽' : '—';
+      return `<tr class="project-row border-b border-slate-800">
+        <td class="py-2 px-2 font-mono text-slate-400">${p.id}</td>
+        <td class="py-2 px-2">${p.title || '—'}</td>
+        <td class="py-2 px-2 text-right font-mono">${budget}</td>
+        <td class="py-2 px-2 text-slate-400">${p.category || '—'}</td>
+        <td class="py-2 px-2 text-center font-mono">${p.score ?? '—'}</td>
+        <td class="py-2 px-2 text-center ${verdictColors[p.verdict] || ''}">${verdictIcons[p.verdict] || ''} ${p.verdict || '—'}</td>
+        <td class="py-2 px-2 text-center ${riskColors[p.client_risk] || ''}">${p.client_risk || '—'}</td>
+        <td class="py-2 px-2 text-center">${p.proposal_path ? `<a href="/api/proposal/${p.proposal_path.split('/').pop()}" target="_blank" class="text-blue-400 hover:underline">📄 КП</a>` : '<span class="text-slate-400">—</span>'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ============================================================
+  // Render logs
+  // ============================================================
+  function renderLogs(steps) {
+    const el = document.getElementById('logs-content');
+    if (!steps.length) { el.textContent = 'Ожидание логов...'; return; }
+    let logs = '';
+    steps.forEach(s => {
+      logs += `\n=== ${s.name} [${s.status}] ${s.duration ? s.duration.toFixed(1)+'с' : ''} ===\n`;
+      if (s.stdout_tail) logs += s.stdout_tail + '\n';
+      if (s.stderr_tail) logs += 'STDERR: ' + s.stderr_tail + '\n';
+    });
+    el.textContent = logs;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ============================================================
+  // Render errors
+  // ============================================================
+  function renderErrors(errors) {
+    const el = document.getElementById('errors-content');
+    if (!errors.length) {
+      el.innerHTML = '<div class="text-slate-500 text-sm">Ошибок нет ✅</div>';
+      return;
+    }
+    el.innerHTML = errors.map(e => `<div class="flex items-start gap-2 text-sm text-red-400 py-1">
+      <span>⚠</span><pre class="whitespace-pre-wrap">${e}</pre>
+    </div>`).join('');
+  }
+
+  // ============================================================
+  // Init
+  // ============================================================
+  loadHistory();
+  fetchStatus();
+  // Force refresh on visibility change (when user switches back to tab)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      fetchStatus();
+      loadHistory();
+    }
+  });
+  // Auto-refresh every 30s as additional fallback (только для текущего запуска)
+  setInterval(() => {
+    if (!viewingHistory) {
+      fetchStatus();
+    }
+    loadHistory();
+  }, 30000);
+</script>
+
+</body>
+</html>

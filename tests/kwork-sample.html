@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Kwork Sample — Тестовая выгрузка для dry run (v2, реальный формат)</title>
+
+  <!--
+    ФИКСТУРА v2: переписана после разбора реального kwork.ru (День 1).
+    Ключевые отличия от v1:
+      - Проекты лежат в JSON-блоке window.stateData.wants[] (Vue SPA, не HTML-карточки).
+      - ID — 7-значное целое (НЕ "kwork-XXXXXX").
+      - priceLimit — строка "X.XX" (одно число, не min-max).
+      - Даты — "YYYY-MM-DD HH:MM:SS" (НЕ ISO, НЕ <time>).
+      - max_days — строка-число.
+      - Заказчик: user.username, user.USERID, user.badges[].
+      - Тегов как структурированного поля НЕТ.
+      - Добавлено поле `category` (логическая категория, в реальном kwork.ru его нет —
+        используется парсером в dry-run для фильтрации на свою категорию).
+      - В head — антибот-маркеры (recaptcha, smartcaptcha, csrf).
+  -->
+
+  <script>
+    window.stateData = {
+      "wants": [
+        {
+          "id": 100001,
+          "category": "telegram_bots",
+          "name": "Telegram-бот для онлайн-записи клиентов",
+          "description": "Нужен Telegram-бот на aiogram 3.x для онлайн-записи клиентов к мастеру маникюра. Бот должен показывать свободные слоты по датам, принимать запись, отправлять напоминание за 24 часа до визита, иметь админку на FastAPI. Интеграция с Google Sheets для хранения записей и бэкапа. Деплой на VPS, Docker. Бюджет обсуждаем в указанном диапазоне.",
+          "priceLimit": "12000.00",
+          "possiblePriceLimit": 15000,
+          "max_days": "7",
+          "category_id": "46",
+          "date_create": "2026-06-04 09:30:12",
+          "date_active": "2026-06-04 09:30:12",
+          "date_expire": "2026-06-11 09:30:00",
+          "timeLeft": "6 д. 23 ч.",
+          "kwork_count": 2,
+          "views_dirty": "18",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 100001,
+            "username": "studio_maria",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Покупатель с подтверждённым телефоном"}},
+              {"badge": {"title": "Более 1 года с Kwork"}}
+            ],
+            "data": {"wants_count": "12", "wants_hired_percent": "80"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/studio_maria"
+        },
+        {
+          "id": 100002,
+          "category": "telegram_bots",
+          "name": "Бот для крипто-сигналов с парсингом бирж",
+          "description": "Бот мониторит цены с Binance и Bybit через WebSocket, при достижении условий рассылает сигналы подписчикам в Telegram. Нужен бэкенд на FastAPI, Redis для очереди, интеграция с платёжной системой для подписки. Документация и тесты обязательны.",
+          "priceLimit": "20000.00",
+          "possiblePriceLimit": 25000,
+          "max_days": "10",
+          "category_id": "46",
+          "date_create": "2026-06-04 11:15:48",
+          "date_active": "2026-06-04 11:15:48",
+          "date_expire": "2026-06-14 11:15:00",
+          "timeLeft": "9 д. 23 ч.",
+          "kwork_count": 4,
+          "views_dirty": "27",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 100002,
+            "username": "crypto_trader_92",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Мощный покупатель"}},
+              {"badge": {"title": "Более 3 лет с Kwork"}}
+            ],
+            "data": {"wants_count": "47", "wants_hired_percent": "65"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/crypto_trader_92"
+        },
+        {
+          "id": 100003,
+          "category": "telegram_bots",
+          "name": "Подключить уведомления из WordPress в Telegram",
+          "description": "Сайт на WordPress, нужно сделать чтобы при публикации нового поста в Telegram-канал автоматически уходило сообщение с заголовком и ссылкой. Плагин или webhook — на ваш выбор. Минимальный бюджет.",
+          "priceLimit": "4000.00",
+          "possiblePriceLimit": 5000,
+          "max_days": "3",
+          "category_id": "13",
+          "date_create": "2026-06-05 07:00:00",
+          "date_active": "2026-06-05 07:00:00",
+          "date_expire": "2026-06-08 07:00:00",
+          "timeLeft": "2 д. 23 ч.",
+          "kwork_count": 8,
+          "views_dirty": "52",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 100003,
+            "username": "wp_dev_test",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [],
+            "data": {"wants_count": "3", "wants_hired_percent": "33"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/wp_dev_test"
+        },
+        {
+          "id": 100004,
+          "category": "telegram_bots",
+          "name": "Бот-курьер для службы доставки еды",
+          "description": "Бот для курьеров: принять заказ, отметить этап (готов, в пути, доставлен), увидеть историю. Админ-панель на FastAPI. Без интеграции с iiko/R-Keeper, только Telegram-интерфейс. Бюджет ограничен.",
+          "priceLimit": "6500.00",
+          "possiblePriceLimit": 8000,
+          "max_days": "5",
+          "category_id": "46",
+          "date_create": "2026-06-05 08:30:21",
+          "date_active": "2026-06-05 08:30:21",
+          "date_expire": "2026-06-10 08:30:00",
+          "timeLeft": "4 д. 23 ч.",
+          "kwork_count": 1,
+          "views_dirty": "9",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 100004,
+            "username": "food_ops_2026",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Покупатель с подтверждённым телефоном"}}
+            ],
+            "data": {"wants_count": "8", "wants_hired_percent": "75"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/food_ops_2026"
+        },
+        {
+          "id": 200001,
+          "category": "microservices",
+          "name": "Микросервис обработки платежей на Go",
+          "description": "Разработать микросервис на Go для приёма и валидации платежей (gRPC API, PostgreSQL, миграции через golang-migrate). Деплой в Kubernetes, Prometheus-метрики, структурное логирование. Идемпотентность операций, корректная обработка дублей. Тесты обязательны (юнит + интеграционные).",
+          "priceLimit": "50000.00",
+          "possiblePriceLimit": 60000,
+          "max_days": "14",
+          "category_id": "5",
+          "date_create": "2026-06-03 14:00:00",
+          "date_active": "2026-06-03 14:00:00",
+          "date_expire": "2026-06-17 14:00:00",
+          "timeLeft": "12 д. 23 ч.",
+          "kwork_count": 0,
+          "views_dirty": "14",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 200001,
+            "username": "fintech_startup",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Мощный покупатель"}},
+              {"badge": {"title": "Более 5 лет с Kwork"}},
+              {"badge": {"title": "Суперкомментатор"}}
+            ],
+            "data": {"wants_count": "224", "wants_hired_percent": "70"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/fintech_startup"
+        },
+        {
+          "id": 200002,
+          "category": "microservices",
+          "name": "REST API для складского учёта",
+          "description": "Нужен REST API на FastAPI для учёта товаров на складе: приход, расход, остатки, отчёты. PostgreSQL, миграции Alembic, JWT-авторизация, OpenAPI-документация. Docker-compose для локального запуска. Готовность к деплою на сервер.",
+          "priceLimit": "23000.00",
+          "possiblePriceLimit": 28000,
+          "max_days": "10",
+          "category_id": "5",
+          "date_create": "2026-06-04 10:00:00",
+          "date_active": "2026-06-04 10:00:00",
+          "date_expire": "2026-06-14 10:00:00",
+          "timeLeft": "9 д. 23 ч.",
+          "kwork_count": 1,
+          "views_dirty": "22",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 200002,
+            "username": "warehouse_co",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Покупатель с подтверждённым телефоном"}},
+              {"badge": {"title": "Более 1 года с Kwork"}}
+            ],
+            "data": {"wants_count": "31", "wants_hired_percent": "68"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/warehouse_co"
+        },
+        {
+          "id": 200003,
+          "category": "microservices",
+          "name": "Интеграция 1С с интернет-магазином",
+          "description": "Настроить двусторонний обмен данными между 1С:Управление торговлей и интернет-магазином на Bitrix. Синхронизация остатков, цен и заказов. Опыт работы с CommerceML обязателен.",
+          "priceLimit": "12500.00",
+          "possiblePriceLimit": 15000,
+          "max_days": "7",
+          "category_id": "8",
+          "date_create": "2026-06-05 06:00:00",
+          "date_active": "2026-06-05 06:00:00",
+          "date_expire": "2026-06-12 06:00:00",
+          "timeLeft": "6 д. 23 ч.",
+          "kwork_count": 3,
+          "views_dirty": "19",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 200003,
+            "username": "shop_owner_1c",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Покупатель с подтверждённым телефоном"}}
+            ],
+            "data": {"wants_count": "5", "wants_hired_percent": "60"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/shop_owner_1c"
+        },
+        {
+          "id": 300001,
+          "category": "content_creation",
+          "name": "Серия технических статей про Python-микросервисы",
+          "description": "Нужно 4 технические статьи по 3000–4000 знаков для блога IT-компании. Темы: «gRPC vs REST в 2026», «Паттерн Saga в микросервисах на практике», «Observability: Prometheus + Grafana + OpenTelemetry», «PostgreSQL: шардирование без боли». Аудитория — middle/senior разработчики. Примеры кода обязательны.",
+          "priceLimit": "16000.00",
+          "possiblePriceLimit": 20000,
+          "max_days": "7",
+          "category_id": "3",
+          "date_create": "2026-06-04 12:00:00",
+          "date_active": "2026-06-04 12:00:00",
+          "date_expire": "2026-06-11 12:00:00",
+          "timeLeft": "6 д. 23 ч.",
+          "kwork_count": 0,
+          "views_dirty": "11",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 300001,
+            "username": "dev_blog_ru",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Мощный покупатель"}},
+              {"badge": {"title": "Более 3 лет с Kwork"}}
+            ],
+            "data": {"wants_count": "59", "wants_hired_percent": "78"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/dev_blog_ru"
+        },
+        {
+          "id": 300002,
+          "category": "content_creation",
+          "name": "Контент-план и тексты для Bitrix24",
+          "description": "Подготовить контент-план на месяц и 8 продающих текстов для лендинга по внедрению Bitrix24. Целевая аудитория — малый бизнес. Низкий чек, нужна скорость.",
+          "priceLimit": "5500.00",
+          "possiblePriceLimit": 7000,
+          "max_days": "5",
+          "category_id": "3",
+          "date_create": "2026-06-05 09:00:00",
+          "date_active": "2026-06-05 09:00:00",
+          "date_expire": "2026-06-10 09:00:00",
+          "timeLeft": "4 д. 23 ч.",
+          "kwork_count": 5,
+          "views_dirty": "31",
+          "status": "active",
+          "isWantActive": true,
+          "isHigherPrice": false,
+          "isNeural": false,
+          "lang": "ru",
+          "user": {
+            "USERID": 300002,
+            "username": "b24_consult",
+            "profilepicture": "noprofilepicture.gif",
+            "badges": [
+              {"badge": {"title": "Покупатель с подтверждённым телефоном"}}
+            ],
+            "data": {"wants_count": "18", "wants_hired_percent": "55"}
+          },
+          "wantUserGetProfileUrl": "https://kwork.ru/user/b24_consult"
+        }
+      ],
+      "pagination": {"total": 9, "per_page": 12, "current_page": 1, "last_page": 1},
+      "counts": {
+        "category_id_46": 4,
+        "category_id_5": 2,
+        "category_id_3": 2,
+        "category_id_13": 1,
+        "category_id_8": 1
+      }
+    };
+  </script>
+
+  <script>
+    window.recaptcha_pubkey = "6LdX9CATAAAAAARb0rBU8FXXdUBajy3IlVjZ2qHS";
+    window.stateData.yandexSmartCaptchaPublicKey = "ysc1_hBr12GvIX6hPj9M0DAC9TM6gquxIeMM0OB4kNlVA74e93fa3";
+    window.stateData.isYandexSmartCaptcha = true;
+    window.csrftoken = "dry_run_test_csrf_token_abc123";
+  </script>
+</head>
+<body>
+  <!-- Vue-скелет (рендерится в браузере, парсер в dry-run читает только JSON выше) -->
+  <div id="app"><wants-view></wants-view></div>
+
+  <div class="js-wants-list-preloaders">
+    <div class="centerwrap page-projects">
+      <div class="f32 page-projects-header">
+        <img src="preloader-header-title.svg" alt="">
+      </div>
+      <div class="page-projects__top">
+        <img class="m-hidden" src="preloader-header-desktop.svg" alt="">
+      </div>
+      <div class="wants-filter-content wants-filter-content--switcher">
+        <div class="wants-left-side">
+          <div class="projects-filter wants-filter wants-filter-sidebar p0 border-0 bg-transparent">
+            <img class="projects-filter__preloader-desktop" src="preloader-filter-desktop.svg" alt="">
+          </div>
+        </div>
+        <div class="wants-content">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+          <img class="m-hidden mb10 mw-100 w-100" src="preloader-project-desktop.svg" alt="">
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

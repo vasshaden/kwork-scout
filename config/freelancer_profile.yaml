@@ -1,0 +1,301 @@
+# config/freelancer_profile.yaml
+#
+# Профиль фрилансера для Kwork Scout v2.1.
+#
+# Загружается агентами (см. CONTRACT.md §12):
+#   - kwork-analyzer:   skills.*, avoid_keywords, red_flags
+#   - kwork-scorer:     scoring_weights, thresholds, *_thresholds
+#   - kwork-client-analyst: client_quality_thresholds
+#   - kwork-proposal-writer: proposal.* (для валидации КП)
+#
+# ПРАВИЛО: изменения в этом файле МЕНЯЮТ поведение пайплайна
+# без правки промптов/кода. Не дублируй эти значения в коде.
+# Если нужна новая логика — добавь поле здесь и обратись к нему из промпта.
+
+version: "2.0"
+updated: "2026-06-09"
+notes: |
+  Изменения v1.2 → v2.0 (День 12):
+    - ПОЛНАЯ ПЕРЕРАБОТКА matching (indicators-driven):
+      Старый подход: поиск явных упоминаний core-технологий (aiogram, sqlalchemy).
+      Результат: skills_match < 0.2 для 90% проектов, т.к. клиенты kwork не пишут
+      названия библиотек — они пишут "что нужно сделать".
+      Новый подход: indicators — слова-признаки, по которым определяется категория
+      проекта (бот, телеграм, api, микросервис, статья). tech_stack — бонусные
+      технологии, если клиент их случайно упомянул.
+    - min_hourly_rate: 200 (без изменений)
+    - indicators для telegram_bots расширены (чат, рассылка, подписка, оплата)
+
+# =============================================================================
+# SKILLS (per-category) — INDICATORS-DRIVEN
+# =============================================================================
+# Новая структура v2.0:
+#   indicators:    слова-признаки — ЧТО нужно сделать (чат-бот, телеграм, парсинг).
+#                  Формируют базовый category_skills_match.
+#   tech_stack:    технологии, которые МЫ бы использовали (aiogram, fastapi).
+#                  Дают бонус к score при упоминании, но НЕ обязательны.
+#   adjacent:      дополнительные признаки, которые могут указывать на категорию.
+#   avoid:         анти-паттерны — встреча = дисквалификация.
+#
+# ВАЖНО: category_skills_match = indicators_match + tech_stack_bonus (cap 1.0)
+#   indicators_match = matched_indicators / total_indicators
+#   tech_stack_bonus = min(matched_tech * 0.1, 0.2)  # до +0.2
+skills:
+  telegram_bots:
+    indicators:
+      - "чат-бот"
+      - "телеграм"
+      - "telegram"
+      - "tg"
+      - "бот"
+      - "рассылка"
+      - "подписка"
+      - "оплата"
+      - "чат"
+      - "bot"
+      - "ассистент"
+      - "автоматизация"
+      - "парсинг"
+    tech_stack:
+      - python
+      - aiogram
+      - python-telegram-bot
+      - telethon
+      - fastapi
+      - postgresql
+      - redis
+      - asyncio
+      - celery
+      - ai
+      - openai
+      - gpt
+    adjacent:
+      - "нейросеть"
+      - "ai"
+      - "нейро"
+      - "интеграция"
+      - "api"
+      - "веб-хук"
+      - "webhook"
+    avoid:
+      - viber-api
+      - whatsapp-api
+      - vk-bot
+      - vk парсинг
+  microservices:
+    indicators:
+      - "микросервис"
+      - "backend"
+      - "api"
+      - "сервер"
+      - "высоконагружен"
+      - "golang"
+      - "go"
+      - "grpc"
+      - "архитектура"
+      - "разработка сервис"
+      - "серверная часть"
+      - "rest"
+      - "rest api"
+    tech_stack:
+      - go
+      - golang
+      - postgresql
+      - grpc
+      - protobuf
+      - python
+      - fastapi
+      - redis
+      - docker
+      - kubernetes
+      - prometheus
+      - grafana
+      - opentelemetry
+    adjacent:
+      - "высокая нагрузка"
+      - "highload"
+      - "база данных"
+      - "бэкенд"
+      - "миграция"
+      - "оптимизация"
+      - "масштабирование"
+    avoid:
+      - soap
+      - websphere
+  content_creation:
+    indicators:
+      - "статья"
+      - "блог"
+      - "devrel"
+      - "техническая документация"
+      - "документация"
+      - "контент"
+      - "раскадровка"
+      - "сценарий"
+      - "туториал"
+      - "гайд"
+      - "учебный материал"
+      - "технический писатель"
+      - "technical writing"
+    tech_stack:
+      - python
+      - postgresql
+      - microservices
+      - fastapi
+      - go
+      - devops
+      - markdown
+      - sphinx
+      - mkdocs
+    adjacent:
+      - "автор"
+      - "писатель"
+      - "редакция"
+      - "text"
+      - "курс"
+      - "обучение"
+      - "knowledge base"
+      - "база знаний"
+    avoid:
+      - seo-copywriting
+      - рерайт
+      - копирайтинг-маркетинг
+      - smm
+      - smm-менеджмент
+
+# Глобальные «красные флаги» — слова/фразы, при которых проект идёт в rejected
+# независимо от категории (см. CONTRACT.md §13.1).
+# Поиск case-insensitive по `description` и `title`.
+avoid_keywords:
+  - wordpress
+  - 1с
+  - 1c
+  - bitrix
+  - битрикс
+  - нативный ios
+  - нативный android
+  - ios native
+  - android native
+  - native ios
+  - native android
+  - 1c-bitrix
+  - 1с-битрикс
+
+# Триггеры «red_flag» (Analyzer добавляет в analysis.red_flags).
+# Проект не дисквалифицируется автоматически, но идёт в review вместо apply.
+avoid_red_flags:
+  - "описание отсутствует"
+  - "тз нет"
+  - "тз уточним"
+  - "оплата по факту"
+  - "без предоплаты"
+  - "договорная"
+  - "цена обсуждается"
+  - "бюджет обсуждаем"
+  - "оплата по результату"
+
+# =============================================================================
+# PREFERENCES
+# =============================================================================
+preferences:
+  # Минимальная приемлемая ставка (₽/час).
+  # Проекты с hourly_implied < min_hourly_rate*0.5 получают budget_fit=0,
+  # в диапазоне [min*0.5, min) — линейно 0..30, в [min, min*1.5) — 30..100.
+  min_hourly_rate: 200
+
+  # Максимальный срок проекта (дни). Больше — отклоняем по timeline_fit.
+  max_project_duration_days: 14
+
+  # Логические категории для парсинга.
+  preferred_categories:
+    - telegram_bots
+    - microservices
+    - content_creation
+
+  # Поведенческие предпочтения.
+  skip_if:
+    - project_inactive
+    - deadline_too_long
+    - no_description
+    - no_budget
+    - no_client_data
+    - duplicate
+
+# =============================================================================
+# SCORING (формулы)
+# =============================================================================
+scoring_weights:
+  tech_match: 0.30
+  budget_fit: 0.25
+  timeline_fit: 0.10
+  client_quality: 0.25
+  competition: 0.10
+
+thresholds:
+  auto_apply_score: 65
+  review_score: 55
+  skip_below: 40
+  client_risk_block: "high"
+
+budget_fit_thresholds:
+  excellent_multiplier: 1.5
+  acceptable_multiplier: 1.0
+  poor_multiplier: 0.5
+  higher_price_bonus: 1.1
+
+timeline_fit_thresholds:
+  excellent_days: 3
+  good_days: 7
+  acceptable_days: 14
+
+competition_thresholds:
+  no_competition_max: 0
+  low_max: 3
+  medium_max: 7
+
+client_quality_thresholds:
+  excellent_hired_percent: 80
+  good_hired_percent: 60
+  poor_hired_percent: 30
+  low_if:
+    hired_percent_min: 70
+    has_badge_any_of:
+      - "Мощный покупатель"
+      - "Более 3 лет с Kwork"
+  high_if:
+    hired_percent_below: 30
+    completed_projects_below: 3
+  medium_otherwise: true
+
+# =============================================================================
+# PROPOSAL (Writer, День 7)
+# =============================================================================
+proposal:
+  max_length_chars: 1500
+  min_length_chars: 400
+  max_iterations: 2
+  price_strategy: "budget_rub"
+  deadline_buffer_days: 1
+  forbidden_phrases:
+    - "готово за час"
+    - "сделаю за час"
+    - "за 5 минут"
+    - "самый лучший"
+    - "лучший в своём роде"
+    - "гарантия 100%"
+    - "гарантирую результат"
+    - "сделаю за копейки"
+    - "дёшево"
+    - "бесплатно"
+    - "оплата после"
+    - "оплата по факту"
+    - "без предоплаты"
+    - "недорого"
+    - "обращайтесь срочно"
+    - "пишите прямо сейчас"
+  greeting_templates:
+    - "Здравствуйте, {nickname}!"
+    - "Добрый день, {nickname}!"
+    - "Здравствуйте!"
+    - "Добрый день!"
+  must_ask_clarification: true

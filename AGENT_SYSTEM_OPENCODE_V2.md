@@ -645,7 +645,7 @@ data/rejected.json — ТОЛЬКО отклонённые с причинами
 | День | Этап | Задачи | Результат | Время |
 |------|------|--------|-----------|-------|
 | **0** | Подготовка | Установить OpenCode, создать структуру папок, сохранить `tests/kwork-sample.html` | Готово к коду | 0.5 ч |
-| **1** | Ручной прогон | Пройти весь цикл вручную в браузере/чате. Записать в `manual-workflow.md` | Понимание edge cases | 1.5 ч |
+| **1** | Ручной прогон | Пройти весь цикл вручную в браузере/чате. Записать результаты | Понимание edge cases | 1.5 ч |
 | **2** | Контракт + профиль | Утвердить JSON v2.1, создать `freelancer_profile.yaml` | `CONTRACT.md`, `config/` | 1 ч |
 | **3** | Parser + dry run | `kwork-parser` в opencode.json. Тест на HTML. 3 категории. | Парсинг работает | 2.5 ч |
 | **4** | Analyzer | `kwork-analyzer`. Фильтр + дедуп + предварительный скор. | score_prelim выдаётся | 2 ч |
@@ -711,14 +711,12 @@ kwork-scout-v2.0/
 │   ├── monitor_server.py                  # FastAPI + SSE backend
 │   ├── write_status.py                    # Утилита записи статуса
 │   ├── kwork_login.py                     # Playwright авто-логин
-│   ├── kwork_live_parse.py                # Live парсер через Playwright
-│   └── simulate_kwork_parser.py           # Симулятор парсера
+│   └── kwork_live_parse.py                # Live парсер через Playwright
 ├── templates/
 │   └── monitor.html                       # HTMX + mermaid.js фронтенд
 ├── CONTRACT.md                            # JSON-схема v2.1
 ├── ARCHITECTURE.md                        # Этот файл
-├── README.md
-└── manual-workflow.md
+└── README.md
 ```
 
 ---

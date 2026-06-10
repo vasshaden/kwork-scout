@@ -60,7 +60,7 @@ description: Запускает полный пайплайн Kwork Scout (6 с�
 
 ## Секреты и креды
 
-**Только** `kwork-parser` имеет право читать `cookies.txt` (сессионные cookies kwork.ru, экспортируются пользователем вручную — см. `MANUAL_LOGIN.md`). Остальные агенты (включая primary `build`) — `deny` на `cat cookies.txt`, `head cookies.txt`, `grep .* cookies.txt`, `read cookies.txt`. Нарушение = утечка сессии = компрометация аккаунта kwork.ru (прецедент Дня 1 был с `.env`).
+**Только** `kwork-parser` имеет право читать `cookies.txt` (сессионные cookies kwork.ru, экспортируются пользователем вручную — см. `tools/README.md`). Остальные агенты (включая primary `build`) — `deny` на `cat cookies.txt`, `head cookies.txt`, `grep .* cookies.txt`, `read cookies.txt`. Нарушение = утечка сессии = компрометация аккаунта kwork.ru (прецедент Дня 1 был с `.env`).
 
 **`.env`** (legacy) содержит `KWORK_LOGIN`/`KWORK_PASSWORD`. С v2.1 парсер **не читает** его — `cookies.txt` достаточно. `.env` остаётся в `.gitignore` как документация (напоминание, под каким логином создавались cookies).
 

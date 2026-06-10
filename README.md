@@ -136,7 +136,7 @@ python3 tools/kwork_login.py
 # Скрипт сам сохранит cookies в cookies.txt
 ```
 
-Подробности: [MANUAL_LOGIN.md](MANUAL_LOGIN.md).
+Подробности: см. `tools/README.md`.
 
 ### 3. Запуск пайплайна
 
@@ -414,16 +414,11 @@ opencode/
 │       └── SKILL.md                  # Skill-регистрация (@kwork-pipeline)
 │
 ├── kwerk_run.py                     # Единая точка входа (главная команда)
-├── simulate_*_dry_run.py            # Симуляторы (внутренние, для отладки)
-├── generate_synthetic_scorer.py     # Генератор тестовых данных
 │
 ├── opencode.json                     # Конфиг агентов + least privilege
 ├── CONTRACT.md                       # JSON-контракт v2.1
 ├── AGENT_SYSTEM_OPENCODE_V2.md       # Дизайн-док (архитектура)
 ├── AGENTS.md                         # Hard rules и контекст
-├── MANUAL_LOGIN.md                   # Инструкция по авто-логину
-├── manual-workflow.md                # Исследование kwork.ru (25 КБ)
-├── CONCLUSION.md                     # Заключение по проекту
 ├── requirements.txt                  # Зависимости Python
 ├── .env.example                      # Пример .env (legacy)
 ├── .gitignore
@@ -575,10 +570,7 @@ ls -la cookies.txt              # → -rw------- (chmod 600)
 | [AGENT_SYSTEM_OPENCODE_V2.md](AGENT_SYSTEM_OPENCODE_V2.md) | Полный дизайн-док (779 строк) |
 | [CONTRACT.md](CONTRACT.md) | JSON-контракт v2.1 (489 строк) |
 | [AGENTS.md](AGENTS.md) | Hard rules и контекст |
-| [MANUAL_LOGIN.md](MANUAL_LOGIN.md) | Инструкция по авто-логину |
 | [tools/README.md](tools/README.md) | Документация утилит |
-| [CONCLUSION.md](CONCLUSION.md) | Заключение по проекту |
-| [manual-workflow.md](manual-workflow.md) | Исследование структуры kwork.ru |
 
 ---
 

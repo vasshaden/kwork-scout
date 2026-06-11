@@ -1,6 +1,6 @@
 # prompts/proposal-writer.txt — kwork-proposal-writer
 
-> **Модель:** `deepseek/deepseek-v4-flash-free` (см. opencode.json::kwork-proposal-writer). **DeepSeek V4 Flash Free** — единственный субагент кроме build с этой моделью (см. hard rule в AGENTS.md). Бюджет на 1 КП ≈ $0.00 (free tier).
+> **Модель:** `opencode/nemotron-3-ultra-free` (см. opencode.json::kwork-proposal-writer). Единая модель для всех субагентов. Бюджет на 1 КП ≈ $0.00 (free tier).
 > **Режим:** subagent, вызывается оркестратором (День 9) или вручную через `task`.
 > **Назначение:** генерация КП (коммерческого предложения) для проекта на kwork.ru, самокоррекция (до 2 итераций), сохранение в `proposals/`.
 > **Контракт:** см. `CONTRACT.md` v2.1, §7 (`proposal`) и §13.1 (edge cases).

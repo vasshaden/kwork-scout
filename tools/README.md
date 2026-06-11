@@ -65,71 +65,41 @@ cd opencode
 | 7   | window.stateData не найден |
 | 8   | wants[] пустой |
 
-## kwork_login.py
+## Встроенный логин (в kwork_live_parse.py)
 
-**Назначение:** авто-логин на kwork.ru через Playwright.
+**Отдельный скрипт `kwork_login.py` больше не существует.** Логин встроен непосредственно в `kwork_live_parse.py`. При запуске парсер сам проверяет `cookies.txt`:
 
-Открывает видимый Chromium, ждёт ручного ввода логина/пароля, извлекает cookies
-и сохраняет их в `../cookies.txt` (Netscape-формат, `chmod 600`).
+1. Если `cookies.txt` существует и валиден — парсинг начинается сразу.
+2. Если файла нет или cookies протухли — открывается видимый Chrome на странице входа.
+3. Пользователь вводит логин/пароль вручную в окне браузера.
+4. После успешного входа скрипт сохраняет свежие cookies и **продолжает парсинг в том же браузере**.
 
-### Установка (один раз)
-
-```bash
-cd opencode
-pip install -r requirements.txt
-playwright install chromium   # ~150 МБ
-```
-
-### Использование
+Таким образом, **отдельный шаг логина не нужен** — достаточно запустить:
 
 ```bash
-python3 tools/kwork_login.py                  # login + cookies (default 5 мин таймаут)
-python3 tools/kwork_login.py --timeout 600    # таймаут 10 мин
-python3 tools/kwork_login.py --url <URL>      # кастомный URL логина
-python3 tools/kwork_login.py --output /tmp/c.txt  # другой путь к файлу
-python3 tools/kwork_login.py --help
+python3 tools/kwork_live_parse.py all
 ```
-
-### Как это работает
-
-1. Запускается Chromium с `headless=False` (видимое окно).
-2. Открывается `https://kwork.ru/login`.
-3. Скрипт ждёт, пока:
-   - URL сменится с `/login` на что-то другое, **И**
-   - на странице появится маркер авторизованного пользователя (user-menu, аватар).
-4. После успешного входа извлекаются cookies для домена `kwork.ru`.
-5. Cookies конвертируются в Netscape-формат и атомарно записываются в `cookies.txt`.
-6. Устанавливаются права `chmod 600` (только владелец).
-7. Скрипт печатает summary (без значений cookies).
-
-### Exit codes
-
-| Код | Значение |
-|-----|----------|
-| 0   | Успех, cookies сохранены |
-| 1   | Ctrl+C пользователем (cookies не сохранены) |
-| 2   | Таймаут входа (пользователь не вошёл) |
-| 3   | Нет cookies для kwork.ru (логин не прошёл) |
 
 ### Системные требования
 
 - **Linux с X11/Wayland**, macOS, или Windows (любой GUI).
 - Если у вас headless-сервер, используйте `xvfb-run`:
   ```bash
-  xvfb-run python3 tools/kwork_login.py
+  xvfb-run python3 tools/kwork_live_parse.py all
   ```
 - На сервере без GUI скрипт выведет предупреждение `[WARN] DISPLAY не задан`.
 
 ## Дальнейшие шаги
 
-После успешного `kwork_login.py` можно запускать live-парсинг:
+После успешного парсинга можно запустить полный пайплайн:
 
 ```bash
-# Через OpenCode skill:
-@kwork-pipeline dry_run=false category=telegram_bots
+# Через kwork_run.py (live):
 
-# Полный прогон всех 3 категорий:
-@kwork-pipeline dry_run=false
+python3 kwork_run.py
+
+# Через OpenCode skill:
+@kwork-pipeline
 ```
 
 ## Безопасность
@@ -159,7 +129,7 @@ python3 tools/monitor_server.py
 # Терминал 2: пайплайн
 "Найди проекты на kwork"
 # или
-@kwork-pipeline dry_run=true
+@kwork-pipeline
 ```
 
 ### Что показывает

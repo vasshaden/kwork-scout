@@ -1,6 +1,6 @@
 # prompts/analyzer.txt — kwork-analyzer
 
-> **Модель:** `nvidia/nemotron-3-ultra-free` (см. opencode.json::kwork-analyzer).
+> **Модель:** `opencode/nemotron-3-ultra-free` (см. opencode.json::kwork-analyzer).
 > **Режим:** subagent, вызывается оркестратором (День 9) или вручную через `task`.
 > **Назначение:** фильтр по навыкам, дедупликация, предварительный скор 1-10. Финальный скор 1-100 — задача Scorer'а (День 5).
 > **Контракт:** см. `CONTRACT.md` v2.1, §5 (analysis) и §13.1 (edge cases).

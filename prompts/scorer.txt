@@ -1,6 +1,6 @@
 # prompts/scorer.txt — kwork-scorer
 
-> **Модель:** `nvidia/nemotron-3-ultra-free` (см. opencode.json::kwork-scorer).
+> **Модель:** `opencode/nemotron-3-ultra-free` (см. opencode.json::kwork-scorer).
 > **Режим:** subagent, вызывается оркестратором (День 9) или вручную через `task`.
 > **Назначение:** финальный взвешенный скор 1-100 по `scoring_weights`, вердикт `apply`/`review`/`skip`. Не генерирует КП и не пишет в `data/`.
 > **Контракт:** см. `CONTRACT.md` v2.1, §6 (`scoring`) и §13.1 (edge cases).

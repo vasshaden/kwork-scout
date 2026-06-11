@@ -1,10 +1,10 @@
-# Агентная система «Kwork Scout» для OpenCode — Версия 2.0 (Improved)
+# Агентная система «Kwork Scout» для OpenCode — Версия 2.1 (v2.1, live-only)
 
-> **«Production-ready с первого дня. Единый контракт, least privilege, dry run, само-валидация, конфигурируемый скоринг.»**
+> **«Production-ready. Единый контракт v2.1, least privilege, live-парсинг, само-валидация, конфигурируемый скоринг.»**
 
 ---
 
-## 1. Архитектура (6 субагентов + Оркестратор + Web Monitor)
+## 1. Архитектура (7 шагов + Оркестратор + Web Monitor)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -12,18 +12,17 @@
 │     Запуск пайплайна, агрегация, отчёт, обработка ошибок        │
 └────────────────────────────┬────────────────────────────────────┘
                              │
-               ┌──────────────┼──────────────┐
-               ▼              ▼              ▼
-┌─────────────────────┐ ┌─────────────┐ ┌─────────────┐  (ПАРАЛЛЕЛЬНО по категориям)
-│ 1. kwork-parser     │ │ 1. kwork-   │ │ 1. kwork-   │
-│    (subagent)       │ │ parser      │ │ parser      │
-│    webfetch, bash   │ │ (bots)      │ │ (content)   │
-└─────────┬───────────┘ └──────┬──────┘ └──────┬──────┘
-          │                    │               │
-          └────────────────────┼───────────────┘
-                               ▼
+               ┌─────────────┴─────────────┐
+               ▼                           ▼
+┌──────────────────────────┐    ┌─────────────────────────────────┐
+│ [0] CHECK AUTH           │    │ 1. PARSER (режим all)           │
+│ tools/kwork_check_auth.py│    │ tools/kwork_live_parse.py all   │
+│ Playwright + cookies.txt │    │ 1 браузер, 3 категории         │
+│ вход → cookies.txt       │    │ глобальный дедуп по ID         │
+└──────────────────────────┘    └──────────────┬──────────────────┘
+                                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 2. kwork-analyzer (subagent)                                    │
+│ 2. kwork-analyzer (subagent или standalone python)              │
 │     Фильтр → дедупликация (history.json) → предварительный скор │
 │     Инструменты: read, grep, glob                               │
 │     Выход: JSON со score_prelim, skills_match, should_process   │
@@ -31,7 +30,7 @@
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 3. kwork-scorer (subagent) — НОВЫЙ АГЕНТ                        │
+│ 3. kwork-scorer (subagent или standalone python)                │
 │     Финальный взвешенный скор 1–100 по профилю фрилансера       │
 │     Инструменты: read                                           │
 │     Вход: ProjectAnalysis + freelancer_profile.yaml             │
@@ -44,16 +43,14 @@
 │ 4. kwork-client-analyst        │    │ (ПАРАЛЛЕЛЬНО для score  │
 │    (subagent)                  │    │  ≥ review_threshold)    │
 │    Проверка заказчика          │    │                         │
-│    Инструменты: read, webfetch,│    │                         │
-│    websearch                   │    │                         │
-│    Выход: rating, risk,        │    │                         │
-│    red_flags[]                 │    │                         │
+│    Инструменты: read           │    │                         │
+│    Выход: risk, red_flags[]    │    │                         │
 └─────────────┬──────────────────┘    └───────────┬─────────────┘
               │                                   │
               └───────────────┬───────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 5. kwork-proposal-writer (subagent)                             │
+│ 5. kwork-proposal-writer (subagent или standalone python)       │
 │     Пишет КП → сам валидирует (≤1500 симв, цена, срок, обращ.)  │
 │     Инструменты: read, write                                    │
 │     ✅ Self-correction до 2 итераций                            │
@@ -62,7 +59,7 @@
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ 6. kwork-history-keeper (subagent)                              │
+│ 6. kwork-history-keeper (subagent или standalone python)         │
 │     Сохраняет: history.json + rejected.json (причины отказов)   │
 │     Инструменты: read, write                                    │
 │     Атомарное обновление обоих файлов                           │
@@ -89,8 +86,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  "model": "nvidia/nemotron-3-ultra-free",
-  "small_model": "nvidia/nemotron-3-ultra-free",
+  "model": "opencode/nemotron-3-ultra-free",
+  "small_model": "opencode/nemotron-3-ultra-free",
 
   "permission": {
     "*": "allow",
@@ -111,7 +108,7 @@
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/orchestrator.txt}",
       "permission": {
         "bash": "allow",
@@ -123,7 +120,7 @@
     "kwork-parser": {
       "description": "Парсит новые проекты с kwork.ru по одной категории",
       "mode": "subagent",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/parser.txt}",
       "permission": {
         "bash": "allow", "read": "allow", "write": "allow", "webfetch": "allow",
@@ -134,7 +131,7 @@
     "kwork-analyzer": {
       "description": "Фильтрует, дедуплицирует, предварительный скор проектов",
       "mode": "subagent",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/analyzer.txt}",
       "permission": {
         "read": "allow", "grep": "allow", "glob": "allow",
@@ -145,7 +142,7 @@
     "kwork-scorer": {
       "description": "Финальный взвешенный скор 1-100 по профилю фрилансера",
       "mode": "subagent",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/scorer.txt}",
       "permission": {
         "read": "allow",
@@ -157,7 +154,7 @@
     "kwork-client-analyst": {
       "description": "Анализирует репутацию и надёжность заказчика",
       "mode": "subagent",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/client-analyst.txt}",
       "permission": {
         "read": "allow", "webfetch": "allow", "websearch": "allow",
@@ -169,7 +166,7 @@
     "kwork-proposal-writer": {
       "description": "Пишет и валидирует КП (≤1500 симв, self-correction)",
       "mode": "subagent",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/proposal-writer.txt}",
       "permission": {
         "read": "allow", "write": "allow",
@@ -181,7 +178,7 @@
     "kwork-history-keeper": {
       "description": "Сохраняет историю проектов и причины отказов",
       "mode": "subagent",
-      "model": "nvidia/nemotron-3-ultra-free",
+      "model": "opencode/nemotron-3-ultra-free",
       "prompt": "{file:./prompts/history-keeper.txt}",
       "permission": {
         "read": "allow", "write": "allow",
@@ -270,8 +267,8 @@
 
   "metadata": {
     "processing_time_sec": 35,
-    "model_calls": { "haiku": 5, "sonnet": 1 },
-    "estimated_cost_usd": 0.08
+    "model_calls": { "nemotron-3": 6 },
+    "estimated_cost_usd": 0.0
   }
 }
 ```
@@ -280,44 +277,43 @@
 
 ## 4. Профиль фрилансера (`config/freelancer_profile.yaml`)
 
+**Актуальная версия (v2.0, indicators-driven):** см. `config/freelancer_profile.yaml`. Ниже — пример (упрощённый, без indicators).
+
 ```yaml
 skills:
-  - python
-  - javascript/typescript
-  - go
-  - postgresql
-  - redis
-  - docker
-  - kubernetes
-  - aiogram
-  - fastapi
-  - next.js
+  telegram_bots:
+    indicators: ["чат-бот", "телеграм", "telegram", "tg", "бот", "рассылка", "подписка", "оплата", "чат", "bot", "ассистент", "автоматизация", "парсинг"]
+    tech_stack: [python, aiogram, python-telegram-bot, telethon, fastapi, postgresql, redis, asyncio, celery, ai, openai, gpt]
+    adjacent: ["нейросеть", "ai", "нейро", "интеграция", "api", "веб-хук", "webhook"]
+    avoid: [viber-api, whatsapp-api, vk-bot, vk парсинг]
+  microservices:
+    indicators: ["микросервис", "backend", "api", "сервер", "высоконагружен", "golang", "go", "grpc", "архитектура", "разработка сервис", "серверная часть", "rest", "rest api"]
+    tech_stack: [go, golang, postgresql, grpc, protobuf, python, fastapi, redis, docker, kubernetes, prometheus, grafana, opentelemetry]
+    adjacent: ["высокая нагрузка", "highload", "база данных", "бэкенд", "миграция", "оптимизация", "масштабирование"]
+    avoid: [soap, websphere]
+  content_creation:
+    indicators: ["статья", "блог", "devrel", "техническая документация", "документация", "контент", "раскадровка", "сценарий", "туториал", "гайд", "учебный материал", "технический писатель", "technical writing"]
+    tech_stack: [python, postgresql, microservices, fastapi, go, devops, markdown, sphinx, mkdocs]
+    adjacent: ["автор", "писатель", "редакция", "text", "курс", "обучение", "knowledge base", "база знаний"]
+    avoid: [seo-copywriting, рерайт, копирайтинг-маркетинг, smm, smm-менеджмент]
+
+avoid_keywords: [wordpress, 1с, 1c, bitrix, битрикс, нативный ios, нативный android, ios native, android native, native ios, native android, 1c-bitrix, 1с-битрикс]
 
 preferences:
-  min_hourly_rate: 1500
+  min_hourly_rate: 200
   max_project_duration_days: 14
-  preferred_categories:
-    - telegram_bots
-    - microservices
-    - backend_development
-    - api_integration
-    - content_creation
-  avoid_keywords:
-    - "wordpress"
-    - "1с"
-    - "bitrix"
-    - "нативный ios/android"
+  preferred_categories: [telegram_bots, microservices, content_creation]
 
 scoring_weights:
   tech_match: 0.30
   budget_fit: 0.25
-  timeline_fit: 0.15
-  client_quality: 0.15
-  competition: 0.15
+  timeline_fit: 0.10
+  client_quality: 0.25
+  competition: 0.10
 
 thresholds:
-  auto_apply_score: 80
-  review_score: 60
+  auto_apply_score: 65
+  review_score: 55
   skip_below: 40
   client_risk_block: "high"
 ```
@@ -388,12 +384,12 @@ thresholds:
 
 ```bash
 # Инициализация
-python3 tools/write_status.py init --run-id $(date +%Y-%m-%d_%H-%M-%S) --mode dry_run --categories telegram_bots,microservices,content_creation
+python3 tools/write_status.py init --run-id $(date +%Y-%m-%d_%H-%M-%S) --mode live --categories telegram_bots,microservices,content_creation
 
 # Шаг: parser
-python3 tools/write_status.py start --step "parser(telegram_bots)"
-<task: kwork-parser>
-python3 tools/write_status.py finish --step "parser(telegram_bots)" --summary "12 projects"
+python3 tools/write_status.py start --step "parser(all)"
+python3 kwork_live_parse.py all --max-pages 3
+python3 tools/write_status.py finish --step "parser(all)" --summary "36 projects"
 
 # Метрики после analyzer/scorer
 python3 tools/write_status.py metrics --total 26 --kept 18 --apply 3 --review 7 --skip 8 --avg-score 52.4
@@ -432,17 +428,18 @@ metadata:
 
 Полный цикл обработки проектов:
 
-1. **Парсинг** — 3× kwork-parser параллельно по категориям
-2. **Анализ** — kwork-analyzer (фильтр + дедуп + предварительный скор)
-3. **Скоринг** — kwork-scorer (финальный взвешенный скор 1-100)
-4. **Проверка заказчика** — kwork-client-analyst (параллельно для score ≥ review)
-5. **КП** — kwork-proposal-writer (для score ≥ auto_apply И risk != high)
-6. **История** — kwork-history-keeper (атомарное сохранение)
+1. **Проверка авторизации** — kwork_check_auth.py (cookies.txt)
+2. **Парсинг** — kwork_live_parse.py all (1 браузер, 3 категории, дедуп по ID)
+3. **Анализ** — kwork-analyzer (фильтр + дедуп + предварительный скор)
+4. **Скоринг** — kwork-scorer (финальный взвешенный скор 1-100)
+5. **Проверка заказчика** — kwork-client-analyst (параллельно для score ≥ review)
+6. **КП** — kwork-proposal-writer (для score ≥ auto_apply И risk != high)
+7. **История** — kwork-history-keeper (атомарное сохранение)
 
 ## Запуск
 
-- `Найди проекты на kwork` или `@kwork-pipeline`
-- Dry run: `@kwork-pipeline dry_run=true`
+- `python3 kwork_run.py` (standalone pipeline)
+- `Найди проекты на kwork` или `@kwork-pipeline` (OpenCode skill)
 
 ## Результат
 
@@ -459,20 +456,20 @@ metadata:
 ### 6.1 Orchestrator (`prompts/orchestrator.txt`)
 
 ```
-Ты — оркестратор мультиагентной системы Kwork Scout.
+Ты — оркестратор мультиагентной системы Kwork Scout v2.1.
 
 ПОРЯДОК РАБОТЫ:
-1. Запусти 3× kwork-parser ПАРАЛЛЕЛЬНО (categories: telegram_bots, microservices, content_creation). Передай dry_run.
-2. Объедини результаты. Передай список в kwork-analyzer.
-3. Для каждого проекта с should_process=true запусти kwork-scorer (можно параллельно).
-4. Для проектов с score ≥ review_threshold ПАРАЛЛЕЛЬНО запусти kwork-client-analyst.
+1. Запусти kwork-parser (режим all) — 1 вызов, все 3 категории, дедуп по ID.
+2. Передай список в kwork-analyzer.
+3. Для проектов с should_process=true запусти kwork-scorer.
+4. Для проектов с score ≥ review_threshold запусти kwork-client-analyst.
 5. Для проектов с score ≥ auto_apply_threshold И client.risk != "high" запусти kwork-proposal-writer.
 6. Запусти kwork-history-keeper со всеми результатами.
 7. Сформируй Markdown-отчёт: таблица + сводка по затратам/времени.
 
 ПРАВИЛА:
 - При ошибке любого агента: логируй, но НЕ останавливай пайплайн.
-- dry_run=true → не пиши в history.json/rejected.json, не отправляй в webfetch живые запросы.
+- live-режим: используй cookies.txt для авторизации.
 - Лимит параллельных тасков: 5 одновременно.
 - Таймаут на агента: 60 сек.
 ```
@@ -480,23 +477,22 @@ metadata:
 ### 6.2 Parser (`prompts/parser.txt`)
 
 ```
-Ты — парсер проектов с kwork.ru для ОДНОЙ категории.
+Ты — парсер проектов с kwork.ru (режим all или одна категория).
 
-КАТЕГОРИИ: telegram_bots | microservices | content_creation
+КАТЕГОРИИ: telegram_bots | microservices | content_creation | all
 
-ИНСТРУМЕНТЫ: webfetch (основной), bash (curl fallback), read (dry_run HTML).
+ИНСТРУМЕНТЫ: bash (вызов tools/kwork_live_parse.py), read (результаты).
 
-ИЗВЛЕКАЙ ИЗ HTML: id, title, budget_rub (min/max), deadline_days, description, url, category, client_nickname, tags[], published_at.
+ИЗВЛЕКАЙ ИЗ stateData.wants[]: id, title, budget_rub (priceLimit), budget_ceiling_rub (possiblePriceLimit), deadline_days, description, url, category, client_nickname, published_at, responses_count, is_higher_price.
 
 ВЫХОД (JSON):
 {
-  "projects": [...],
-  "count": N,
-  "category": "telegram_bots",
-  "error": null
+  "_schema_version": "2.1",
+  "_batch": { "category": "all", "count": N, "error": null },
+  "projects": [...]
 }
 
-dry_run=true → читай tests/kwork-sample.html через read.
+В режиме all: запускай tools/kwork_live_parse.py all --max-pages 3.
 Ошибка парсинга → верни error с описанием, projects: [].
 ```
 
@@ -640,48 +636,57 @@ data/rejected.json — ТОЛЬКО отклонённые с причинами
 
 ---
 
-## 8. План разработки на 10 дней (обновлённый)
+## 8. План разработки на 14 дней (ВЫПОЛНЕН)
 
-| День | Этап | Задачи | Результат | Время |
-|------|------|--------|-----------|-------|
-| **0** | Подготовка | Установить OpenCode, создать структуру папок, сохранить `tests/kwork-sample.html` | Готово к коду | 0.5 ч |
-| **1** | Ручной прогон | Пройти весь цикл вручную в браузере/чате. Записать результаты | Понимание edge cases | 1.5 ч |
-| **2** | Контракт + профиль | Утвердить JSON v2.1, создать `freelancer_profile.yaml` | `CONTRACT.md`, `config/` | 1 ч |
-| **3** | Parser + dry run | `kwork-parser` в opencode.json. Тест на HTML. 3 категории. | Парсинг работает | 2.5 ч |
-| **4** | Analyzer | `kwork-analyzer`. Фильтр + дедуп + предварительный скор. | score_prelim выдаётся | 2 ч |
-| **5** | Scorer | `kwork-scorer`. Взвешенный скор 1-100 по профилю. | Финальный score + verdict | 2 ч |
-| **6** | Client Analyst | `kwork-client-analyst`. Проверка заказчика. | JSON с rating/risk | 1.5 ч |
-| **7** | Writer + Validator | `kwork-proposal-writer` с self-correction (2 итерации). | Валидный КП всегда | 3 ч |
-| **8** | History Keeper | `kwork-history-keeper`. `history.json` + `rejected.json`. | История работает | 1.5 ч |
-| **9** | Оркестратор + скилл | `kwork-pipeline/SKILL.md`. Соединить всех. Обработка ошибок. | Запуск через `@kwork-pipeline` | 2.5 ч |
-| **10** | E2E + боевой | Прогон на 10 реальных проектах. Исправить баги. README. Первый отклик. | Рабочая система | 2 ч |
+| День | Этап | Статус |
+|------|------|--------|
+| **0** | Подготовка | ✅ Выполнено |
+| **1** | Ручной прогон | ✅ Выполнено |
+| **2** | Контракт + профиль | ✅ `CONTRACT.md`, `config/` |
+| **3** | Parser | ✅ Playwright, cookies, категории |
+| **4** | Analyzer | ✅ Фильтр + дедуп + скор |
+| **5** | Scorer | ✅ Взвешенный 1-100 |
+| **6** | Client Analyst | ✅ risk: low/medium/high |
+| **7** | Writer + Validator | ✅ Self-correction ≤2 итераций |
+| **8** | History Keeper | ✅ Атомарная запись |
+| **9** | Оркестратор + скилл | ✅ `kwork-pipeline` |
+| **10** | E2E + боевой | ✅ Live-прогон, README |
+| **11** | Веб-монитор | ✅ FastAPI + SSE + HTMX |
+| **12** | Indicators-driven matching | ✅ v2.0 |
+| **13** | Дедуп по категориям (all) | ✅ Глобальный дедуп |
+| **14** | Финальный прогон | ✅ 36 проектов, отчёт |
 
-**Итого: 20 часов** (≈2 часа в день)
+**Итого: ~24 часа**
 
 ---
 
-## 9. Definition of Done (жёсткие критерии)
+## 9. Definition of Done (жёсткие критерии) — текущий статус
 
-- [ ] Пайплайн запускается одной командой: `@kwork-pipeline`
-- [ ] Dry run работает на `tests/kwork-sample.html` без live-запросов
-- [ ] На выходе: Markdown-отчёт + `proposals/*.md` + `logs/run_*.json`
-- [ ] Дубли исключаются (проверено: 2 запуска подряд → 0 новых в history)
-- [ ] Стоимость прогона **$0.00** (Nemotron 3 Ultra Free для всех 7 агентов — free tier)
-- [ ] Время цикла ≤ 8 минут для 10 проектов
-- [ ] КП всегда ≤1500 символов, проходит валидацию с 1-2 итераций
-- [ ] `rejected.json` содержит причину для **каждого** непринятого проекта
-- [ ] Ошибка любого агента не роняет пайплайн (логируется, продолжаем)
-- [ ] `freelancer_profile.yaml` меняет поведение скоринга без правки кода
+- [x] Пайплайн запускается одной командой: `python3 kwork_run.py`
+- [x] Live-парсинг работает через Playwright + cookies.txt (36 проектов за прогон)
+- [x] На выходе: Markdown-отчёт + `proposals/*.md` + `logs/run_*.json`
+- [x] Дубли исключаются (тройная дедупликация: парсер → analyzer → history-keeper)
+- [x] Стоимость прогона **$0.00** (Nemotron 3 Ultra Free для всех 7 агентов — free tier)
+- [x] Время цикла ≤ 8 минут для 10 проектов
+- [x] КП всегда ≤1500 символов, проходит валидацию с 1-2 итераций
+- [x] `rejected.json` содержит причину для **каждого** непринятого проекта
+- [x] Ошибка любого агента не роняет пайплайн (логируется, продолжаем)
+- [x] `freelancer_profile.yaml` меняет поведение скоринга без правки кода
 
 ---
 
 ## 10. Файловая структура проекта
 
 ```
-kwork-scout-v2.0/
+kwork-scout-v2.1/
+├── kwork_run.py                           # Единая точка входа
+├── kwork_analyzer.py                      # Анализ проектов
+├── kwork_scorer.py                        # Скоринг
+├── kwork_client_analyst.py                # Оценка рисков заказчиков
+├── kwork_proposal_writer.py               # Генерация КП
+├── kwork_history_keeper.py                # Атомарное сохранение истории
 ├── opencode.json                          # Конфиг агентов и разрешений
 ├── .opencode/
-│   ├── agents/                            # (опционально) Markdown-агенты
 │   └── skills/
 │       └── kwork-pipeline/
 │           └── SKILL.md                   # Скилл-оркестратор
@@ -689,34 +694,40 @@ kwork-scout-v2.0/
 │   ├── orchestrator.txt
 │   ├── parser.txt
 │   ├── analyzer.txt
-│   ├── scorer.txt                         # НОВЫЙ
+│   ├── scorer.txt
 │   ├── client-analyst.txt
 │   ├── proposal-writer.txt
 │   └── history-keeper.txt
 ├── config/
-│   └── freelancer_profile.yaml            # Навыки, веса, пороги
-├── data/
+│   └── freelancer_profile.yaml            # Навыки, веса, пороги (v2.0 indicators-driven)
+├── data/                                  # Runtime (в .gitignore)
 │   ├── history.json
-│   ├── rejected.json
-│   └── metrics.json
-├── proposals/
-│   └── 2026-06-05_kwork-123456.md
-├── tests/
-│   └── kwork-sample.html                  # Для dry run
-├── logs/
-│   ├── run_2026-06-05_10-00-00.json
+│   └── rejected.json
+├── reports/                               # Отчёты прогонов
+│   └── RUN_*.md
+├── proposals/                             # КП (в .gitignore)
+│   └── YYYY-MM-DD_kwork-{id}.md
+├── logs/                                  # Runtime (в .gitignore)
+│   ├── parser_live.json
+│   ├── analyzer_*.json
+│   ├── scorer_*.json
+│   ├── client_analyst_*.json
+│   ├── proposal_writer_*.json
+│   ├── history_keeper_*.json
 │   ├── pipeline_status.json               # Runtime статус (веб-монитор)
 │   └── runs/                              # История запусков (веб-монитор)
 ├── tools/
+│   ├── kwork_live_parse.py                # Парсер Playwright (режим all, встроенный логин)
+│   ├── kwork_check_auth.py                # Проверка/выполнение входа на kwork.ru
 │   ├── monitor_server.py                  # FastAPI + SSE backend
 │   ├── write_status.py                    # Утилита записи статуса
-│   ├── kwork_login.py                     # Playwright авто-логин
-│   └── kwork_live_parse.py                # Live парсер через Playwright
+│   └── README.md                          # Документация tools/
 ├── templates/
 │   └── monitor.html                       # HTMX + mermaid.js фронтенд
 ├── CONTRACT.md                            # JSON-схема v2.1
-├── ARCHITECTURE.md                        # Этот файл
-└── README.md
+├── AGENTS.md                              # Hard rules
+├── AGENT_SYSTEM_OPENCODE_V2.md            # Этот файл (дизайн-док)
+└── README.md                              # Актуальная документация
 ```
 
 ---
@@ -725,7 +736,7 @@ kwork-scout-v2.0/
 
 | Риск | Вероятность | Митигация |
 |------|-------------|-----------|
-| **Kwork меняет вёрстку** | Средняя | Dry run на сохранённой HTML, Parser изолирован, селекторы в промпте |
+| **Kwork меняет структуру stateData** | Средняя | Playwright + stateData (не DOM-scraping), fallback на DOM-селекторы |
 | **Агент врёт об успехе** | Высокая | Writer сам себя валидирует (2 итерации), History Keeper логирует всё |
 | **Дубли проектов** | Высокая | History Keeper + проверка в Analyzer (двойной щит) |
 | **Нет данных о заказчике** | Средняя | Client Analyst ставит risk="unknown", scorer штрафует |
@@ -750,18 +761,15 @@ kwork-scout-v2.0/
 
 ---
 
-## 13. Готовый запрос для первого запуска (Day 3)
+## 13. Историческая справка: создание kwork-parser (Day 3)
 
-```text
-Создай субагента kwork-parser в opencode.json:
+Конфигурация `kwork-parser` в `opencode.json`:
+
 - Режим: subagent
-- Модель: nvidia/nemotron-3-ultra-free
+- Модель: `opencode/nemotron-3-ultra-free`
 - Разрешения: bash=allow, read=allow, write=allow, webfetch=allow, grep=deny, glob=deny, edit=deny
-- Системная инструкция: файл prompts/parser.txt (парсинг одной категории, dry_run поддержка)
-- Выход: JSON с projects[], count, category, error
 
-Сохрани в .opencode/agents/kwork-parser.md (альтернатива JSON) ИЛИ добавь в opencode.json.
-```
+> **Примечание:** на текущий момент (v2.1, Day 14) парсинг выполняется через `tools/kwork_live_parse.py` (режим `all`), а не через AI-агента. Конфигурация в `opencode.json` сохранена для совместимости.
 
 ---
 
@@ -769,9 +777,13 @@ kwork-scout-v2.0/
 
 1. **Отдельный Scorer** — чистое разделение предварительного фильтра и финального взвешенного скоринга
 2. **Конфигурируемый профиль** — веса, пороги, навыки в YAML, не в коде
-3. **Параллельный парсинг** по 3 категориям сразу (быстрее в 3 раза)
-4. **Least privilege таблица** — безопасность по умолчанию
-5. **Жёсткий Definition of Done** — измеримые критерии приёмки
-6. **Metadata в контракте** — стоимость, время, вызовы моделей для оптимизации
-7. **Rejection reason enum** — структурированные причины для ML на неделе 7-8
-8. **Обработка ошибок в оркестраторе** — graceful degradation
+3. **Единая модель** — `opencode/nemotron-3-ultra-free` для всех 7 агентов, бюджет $0.00
+4. **Глобальный дедуп по категориям** — один браузер, режим `all`, `categories: []`
+5. **Live-парсинг через Playwright** — обход SmartCaptcha, cookies.txt, встроенный логин
+6. **Indicators-driven matching v2.0** — отказ от поиска библиотек в пользу семантических индикаторов
+7. **Веб-монитор** — FastAPI + SSE + HTMX, live-дашборд
+8. **Least privilege таблица** — безопасность по умолчанию
+9. **Жёсткий Definition of Done** — измеримые критерии приёмки
+10. **Rejection reason enum** — структурированные причины для ML на неделе 7-8
+11. **Обработка ошибок** — graceful degradation, ни один агент не роняет пайплайн
+12. **Атомарная запись истории** — `history.json` + `rejected.json` за один вызов

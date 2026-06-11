@@ -18,6 +18,12 @@ Real Chromium проходит антибот-проверку.
     дедуплицирует по project.id с сохранением categories: [] (массив всех категорий).
     Выход: один файл logs/parser_live.json со всеми уникальными проектами.
 
+ВСТРОЕННЫЙ ЛОГИН (День 12):
+    Скрипт сам проверяет валидность cookies.txt перед парсингом.
+    Если cookies нет/протухли — открывает страницу логина, ждёт ручного входа,
+    сохраняет cookies и ПРОДОЛЖАЕТ ПАРСИНГ В ТОМ ЖЕ БРАУЗЕРЕ.
+    Отдельный скрипт kwork_login.py больше не нужен.
+
 Использование:
     .venv/bin/python tools/kwork_live_parse.py telegram_bots          # одна категория
     .venv/bin/python tools/kwork_live_parse.py microservices
@@ -31,9 +37,9 @@ Real Chromium проходит антибот-проверку.
 Exit codes:
     0 — успех, projects в JSON
     1 — Ctrl+C пользователем
-    2 — cookies.txt не найден
+    2 — cookies.txt не найден и пользователь не залогинился
     4 — Playwright не установлен / неизвестная категория
-    5 — cookies невалидны (редирект на /login)
+    5 — cookies невалидны и пользователь не залогинился после 5 минут
     6 — captcha challenge без решения
     7 — window.stateData не найден на странице
     8 — wants[] пустой
@@ -67,6 +73,7 @@ MAX_PAGES_DEFAULT = 10  # лимит страниц при пагинации (k
 PAGE_DELAY = 2  # секунд между страницами (anti-bot friendly)
 DETAIL_PAGE_DELAY = 3  # секунд между открытием отдельных проектов (anti-bot friendly)
 MAX_DETAIL_PAGES_DEFAULT = 10  # макс. проектов для открытия детальной страницы
+
 
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -367,7 +374,7 @@ def parse_one_category(p, category: str, fc: int, headless: bool = False,
             return {"_batch": {"category": category, "count": 0, "error": "cookies_not_found"},
                     "projects": []}
         print(f"[INFO] Загружено {n_cookies} cookies из {COOKIES_FILE.name}")
-
+        
         page = context.new_page()
         # Прогрев
         print(f"[INFO] Прогрев: открываю https://kwork.ru/ чтобы сессия ожила...")
@@ -758,11 +765,6 @@ def main() -> int:
                         help=f"Максимум проектов для детального парсинга (default: {MAX_DETAIL_PAGES_DEFAULT})")
     parser.add_argument("--output", help="Путь к выходному JSON (default: logs/parser_live_<cat>.json)")
     args = parser.parse_args()
-
-    if not COOKIES_FILE.exists():
-        print(f"[ERROR] {COOKIES_FILE} не найден. Запустите tools/kwork_login.py",
-              file=sys.stderr)
-        return 2
 
     headless = args.headless
     if headless:

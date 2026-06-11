@@ -1,6 +1,6 @@
 # prompts/orchestrator.txt — kwork-pipeline orchestrator (v2.1, full pipeline, free-tier)
 
-> **Модель:** `nvidia/nemotron-3-ultra-free` (см. opencode.json::build). Nemotron 3 Ultra Free — primary-модель (все 7 агентов унифицированы).
+> **Модель:** `opencode/nemotron-3-ultra-free` (см. opencode.json::build). Nemotron 3 Ultra Free — единая модель для всех 7 агентов (оркестратор + 6 субагентов).
 > **Режим:** primary (это основной агент, с которым общается пользователь).
 > **Назначение:** запуск ПОЛНОГО пайплайна (parser → analyzer → scorer → client-analyst → proposal-writer → history-keeper), агрегация результатов, формирование markdown-отчёта.
 > **Контракт:** см. `CONTRACT.md` v2.1.
@@ -86,52 +86,12 @@
 
 **Только для `dry_run=false`.** В dry-режиме cookies не нужны, шаг пропускается.
 
-1. **Проверь наличие `cookies.txt`:** `test -f cookies.txt`.
-2. **Если файл ЕСТЬ** — продолжить без вопросов. Логировать в `logs/run_*.json` поле `metadata.cookies_age_human` (mtime через `stat -c %Y cookies.txt`, перевести в «N часов назад»).
-3. **Если файл ОТСУТСТВУЕТ** — **не** начинать парсинг:
-   - Вывести пользователю понятное сообщение:
-     ```
-     ⚠️  cookies.txt не найден.
-     Для live-парсинга нужна сессия kwork.ru. Запустить авто-логин?
-     Команда: python3 tools/kwork_login.py
-     (откроется видимый Chrome, введите логин/пароль, скрипт сам сохранит cookies)
-     Подробности: MANUAL_LOGIN.md
-     ```
-   - **Спросить подтверждение** у пользователя.
-   - Если пользователь подтвердил → выполнить через `bash`:
-     ```bash
-     python3 tools/kwork_login.py
-     ```
-     - Дождаться завершения (exit 0 = успех).
-     - Если exit ≠ 0 → сообщить об ошибке пользователю, **остановить пайплайн** с понятным сообщением:
-       - exit 1 (Ctrl+C) → «Авто-логин прерван пользователем. Запустите пайплайн заново после успешного логина.»
-       - exit 2 (таймаут) → «Не удалось залогиниться за 5 минут. Повторите запуск, войдите быстрее.»
-       - exit 3 (нет cookies) → «Cookies не извлеклись. См. MANUAL_LOGIN.md §6.3 (Troubleshooting).»
-   - Если пользователь **отказался** запускать логин → спросить ещё раз:
-     ```
-     Без cookies live-парсинг невозможен. Варианты:
-       1. Запустить `python3 tools/kwork_login.py` и повторить пайплайн.
-       2. Переключиться на dry-режим (cookies не нужны).
-       3. Отменить запуск.
-     Ваш выбор (1/2/3, default: 3):
-     ```
-   - По умолчанию (пустой ввод) — выбор 3 (отмена).
-4. **Проверка формата (опционально, для информации):** `head -c 80 cookies.txt` — должно начинаться с `# Netscape`. Если нет — предупредить, но не блокировать (парсер сам обработает как `cookies_file_format_invalid`).
-5. **Логировать preflight-решение** в `logs/run_*.json`:
-   ```json
-   {
-     "metadata": {
-       "preflight": {
-         "cookies_txt_exists": true,
-         "cookies_txt_mtime_iso": "2026-06-06T12:34:56Z",
-         "auto_login_invoked": false,
-         "auto_login_exit_code": null
-       }
-     }
-   }
-   ```
+В live-режиме парсер (`kwork-parser` / `tools/kwork_live_parse.py`) сам проверяет валидность сессии:
+1. При запуске проверяет `cookies.txt` — если файла нет или cookies протухли — открывает Chrome на странице логина.
+2. Введите логин/пароль в открывшемся окне браузера.
+3. После успешного входа скрипт сохраняет свежие cookies и **продолжает парсинг в том же браузере**.
 
-**Примечание:** `kwork_login.py` — это **утилита**, не агент. Вызывается напрямую через `bash`, не через `task kwork-login`. Это намеренно — скрипт интерактивный (открывает окно), субагент для этого не нужен.
+Отдельный скрипт `kwork_login.py` больше не нужен — логин встроен в парсер.
 
 ## ПОРЯДОК РАБОТЫ (для текущего Дня 9, v2.1)
 
@@ -405,10 +365,9 @@ python3 tools/write_status.py save-run
 
 ## СЛЕДУЮЩИЙ ШАГ (после Дня 9)
 
-День 10 — реальный live-прогон с авто-логином через `tools/kwork_login.py` (НЕ в dry-режиме), тест с реальными проектами kwork.ru. **Требует:**
+День 10 — реальный live-прогон, тест с реальными проектами kwork.ru. **Требует:**
 - Установленный Playwright: `pip install -r requirements.txt && playwright install chromium`.
-- OpenCode runtime с настроенными free-tier моделями.
-- **Не нужно заранее** создавать `cookies.txt` — orchestrator сам предложит запустить `python3 tools/kwork_login.py` (см. PREFLIGHT выше).
+- **Не нужно заранее** создавать `cookies.txt` — `tools/kwork_live_parse.py` сам запросит логин при запуске.
 - Не более 5 запросов к kwork.ru за прогон (не нагружать).
 
 Сейчас (День 9) — только dry-run E2E на `tests/kwork-sample.html`. Live — отдельная задача (День 10+).

@@ -1,10 +1,10 @@
 # Kwork Scout v2.1
 
-> **Мультиагентный пайплайн** для автоматизированного поиска, скоринга и формирования откликов на проекты с [kwork.ru](https://kwork.ru).
+> **Пайплайн** для автоматизированного поиска, скоринга и формирования откликов на проекты с [kwork.ru](https://kwork.ru).
 >
-> **Бюджет:** $0.00 — все компоненты работают на free-tier моделях.
-> **Платформа:** OpenCode (OpenAI Code Agent).
-> **Статус:** ✅ E2E dry-run пройден, ✅ live-парсинг работает, ✅ веб-монитор активен, ✅ калибровка скоринга v2.0.
+> **Бюджет:** $0.00 — все компоненты работают на free-tier модели.
+> **Платформа:** OpenCode.
+> **Статус:** ✅ live-парсинг работает, ✅ веб-монитор активен, ✅ авторизация через cookies.
 
 ---
 
@@ -13,7 +13,7 @@
 - [Описание](#описание)
 - [Архитектура](#архитектура)
 - [Быстрый старт](#быстрый-старт)
-- [Пайплайн (6 шагов)](#пайплайн-6-шагов)
+- [Пайплайн (7 шагов)](#пайплайн-7-шагов)
 - [Веб-монитор](#веб-монитор)
 - [Конфигурация](#конфигурация)
 - [Модели](#модели)
@@ -21,13 +21,12 @@
 - [Примеры использования](#примеры-использования)
 - [Решение проблем](#решение-проблем)
 - [Безопасность](#безопасность)
-- [Roadmap](#roadmap)
 
 ---
 
 ## Описание
 
-**Kwork Scout** — это мультиагентная система на базе OpenCode, которая:
+**Kwork Scout** — это система для автоматизации работы с kwork.ru:
 
 1. **Парсит** kwork.ru по трём категориям (telegram_bots, microservices, content_creation)
 2. **Фильтрует** проекты по навыкам из профиля фрилансера
@@ -36,74 +35,27 @@
 5. **Генерирует** коммерческое предложение (КП) для подходящих проектов
 6. **Сохраняет** историю и отклонённые проекты атомарно
 
-Система спроектирована по принципу **least privilege**: каждый агент имеет ровно те права, которые необходимы для его задачи. Веса скоринга, пороги и навыки вынесены в YAML-конфиг — изменение поведения без правки промптов.
+Веса скоринга, пороги и навыки вынесены в YAML-конфиг — изменение поведения без правки кода.
 
-> **v2.0 (indicators-driven matching):** Клиенты kwork.ru редко пишут названия библиотек — они описывают, _что_ нужно сделать. Поэтому matching переработан: `indicators` (слова-признаки: «чат-бот», «телеграм», «api») + `tech_stack` (бонусные технологии) + `adjacent`. Это повысило `skills_match` с ~0.2 до 0.3–0.8 для релевантных проектов.
-
-### Целевая аудитория
-
-- Фрилансеры, которые хотят автоматизировать поиск заказов на kwork.ru
-- Разработчики мультиагентных систем на OpenCode
-- Все, кто интересуется AI-автоматизацией фриланса
+> **v2.0 (indicators-driven matching):** matching переработан: `indicators` + `tech_stack` + `adjacent` вместо поиска явных названий библиотек.
 
 ---
 
 ## Архитектура
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ORCHESTRATOR (build agent)                                 │
-│  DeepSeek V4 Flash Free                                     │
-│  Запускает граф, агрегирует результаты, пишет отчёт         │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 1. PARSER (Nemotron 3 Ultra Free)                           │
-│    Парсит kwork.ru (3 категории, дедуп по ID)               │
-│    → logs/parser_live.json                                  │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. ANALYZER (Nemotron 3 Ultra Free)                         │
-│    Фильтр по навыкам, дедуп, prel. score 1-10               │
-│    → logs/analyzer_*.json                                   │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. SCORER (Nemotron 3 Ultra Free)                           │
-│    Финальный скор 1-100 + verdict (apply/review/skip)       │
-│    → logs/scorer_*.json                                     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-            ┌──────────┴──────────┐
-            ▼                     ▼
-┌────────────────────┐  ┌────────────────────────────────┐
-│ 4. CLIENT-ANALYST  │  │ 5. PROPOSAL-WRITER             │
-│ (Nemotron 3 Ultra) │  │ (Nemotron 3 Ultra Free)        │
-│ risk для apply/    │  │ КП ≤1500 симв, self-correct    │
-│ review             │  │ → proposals/*.md               │
-└─────────┬──────────┘  └──────────┬─────────────────────┘
-          └──────────┬─────────────┘
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 6. HISTORY-KEEPER (Nemotron 3 Ultra Free)                   │
-│    Атомарная запись → data/history.json + rejected.json     │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 7. ORCHESTRATOR формирует markdown-отчёт                    │
-└─────────────────────────────────────────────────────────────┘
+Пайплайн (7 шагов):
+
+[0] Check auth  → tools/kwork_check_auth.py  → cookies.txt
+[1] Parser      → tools/kwork_live_parse.py   → logs/parser_live.json
+[2] Analyzer    → kwork_analyzer.py           → logs/analyzer_*.json
+[3] Scorer      → kwork_scorer.py             → logs/scorer_*.json
+[4] Client Analyst → kwork_client_analyst.py  → logs/client_analyst_*.json
+[5] Proposal Writer → kwork_proposal_writer.py → proposals/*.md
+[6] History Keeper → kwork_history_keeper.py  → data/history.json + rejected.json
 ```
 
-### Параллелизм
-
-- **Шаг 1:** Парсер запускается один раз с категорией `all` — один браузер, все 3 категории последовательно.
-- **Шаги 4 и 5:** `client-analyst` и `proposal-writer` работают **параллельно**.
-- Остальные шаги — строго последовательно.
+Все шаги выполняются **последовательно**. Каждый шаг — отдельный Python-скрипт.
 
 ---
 
@@ -112,7 +64,6 @@
 ### 1. Установка
 
 ```bash
-# Клонировать репозиторий
 cd opencode
 
 # Создать виртуальное окружение
@@ -121,87 +72,73 @@ source .venv/bin/activate
 
 # Установить зависимости
 pip install -r requirements.txt
-playwright install chromium   # ~150 МБ, только для live-режима
+playwright install chromium   # ~150 МБ
 ```
 
-### 2. Авторизация на kwork.ru (live-режим)
+### 2. Авторизация на kwork.ru
 
-Для live-парсинга нужна сессия kwork.ru:
+**Первый запуск** — выполнить вход:
 
 ```bash
-# Запустить авто-логин (откроется видимый Chrome)
-python3 tools/kwork_login.py
-
-# Войти вручную в opened браузере
-# Скрипт сам сохранит cookies в cookies.txt
+python3 tools/kwork_check_auth.py
 ```
+Откроется Chrome на странице kwork.ru. Введите логин/пароль. После входа cookies сохранятся в `cookies.txt`.
 
-Подробности: см. `tools/README.md`.
+**Последующие запуски** — вход не требуется, скрипт использует сохранённые cookies.
 
 ### 3. Запуск пайплайна
 
-#### Dry-run (без интернета, тестовые данные):
-
 ```bash
-python3 kwerk_run.py
-```
+# Полный пайплайн:
+python3 kwork_run.py
 
-#### Live-режим (реальные проекты с kwork.ru):
+# С очисткой истории:
+python3 kwork_run.py --clear
 
-```bash
-python3 kwerk_run.py --live
-```
-
-#### С очисткой истории:
-
-```bash
-python3 kwerk_run.py --live --clear
-```
-
-#### Ограничить число проектов:
-
-```bash
-python3 kwerk_run.py --max-projects 5
+# С ограничением проектов:
+python3 kwork_run.py --max-projects 5
 ```
 
 ### 4. Веб-монитор
 
 ```bash
-# Терминал 1: запустить монитор
+# Терминал: запустить монитор
 python3 tools/monitor_server.py
 # → http://localhost:8080
-
-# Терминал 2: запустить пайплайн
-python3 kwerk_run.py --live
 ```
-
-Монитор обновляется в реальном времени через SSE. После прогона таблица проектов заполнится автоматически.
 
 ---
 
-## Пайплайн (6 шагов)
+## Пайплайн (7 шагов)
 
-### Шаг 1: Парсер (`kwork-parser`)
+### Шаг 0: Check auth (`tools/kwork_check_auth.py`)
 
-| Режим | Источник данных | Команда |
-|-------|----------------|---------|
-| Dry | `tests/kwork-sample.html` | Чтение локального файла |
-| Live | kwork.ru (3 категории) | Playwright + cookies.txt |
+- Открывает Chrome на kwork.ru
+- Проверяет авторизацию через поиск кнопки «Войти» в DOM
+- Если кнопка есть → не авторизован → ждёт ввода логина/пароля
+- Если кнопки нет → авторизован → сохраняет cookies
+- **Выход:** обновлённый `cookies.txt`
+
+### Шаг 1: Парсер (`tools/kwork_live_parse.py`)
+
+| Режим | Источник данных |
+|-------|----------------|
+| Live | kwork.ru (3 категории, 3 страницы каждая) через Playwright + cookies.txt |
 
 Парсит все 3 категории в одном браузере, дедуплицирует по `project.id`, сохраняет массив `categories: []`.
 
 **Выход:** `logs/parser_live.json`.
 
-### Шаг 2: Анализатор (`kwork-analyzer`)
+### Шаг 2: Анализатор (`kwork_analyzer.py`)
 
-- Фильтрует проекты по навыкам (core / adjacent / avoid из `freelancer_profile.yaml`)
-- Дедуплицирует (defensive layer)
+- Фильтрует проекты по навыкам
+- Дедуплицирует
 - Вычисляет предварительный скор 1–10
 - Проверяет `avoid_keywords` и `avoid_red_flags`
 
 **Выход:** `logs/analyzer_*.json`.
 
-### Шаг 3: Скорер (`kwork-scorer`)
+### Шаг 3: Скорер (`kwork_scorer.py`)
 
 Взвешенный скор 1–100 по 5 компонентам:
 
@@ -210,7 +147,7 @@ python3 kwerk_run.py --live
 | tech_match | 0.30 | Соответствие навыкам (indicators-driven) |
 | budget_fit | 0.25 | Ставка ₽/ч |
 | timeline_fit | 0.10 | Срок выполнения |
-| client_quality | 0.25 | Качество заказчика (↑ v2.0) |
+| client_quality | 0.25 | Качество заказчика |
 | competition | 0.10 | Число откликов |
 
 **Вердикты:**
@@ -221,13 +158,11 @@ python3 kwerk_run.py --live
 | 55–64 | 🟡 **review** | Ручное решение |
 | < 55 | 🔴 **skip** | Отклонить |
 
-> **Калибровка v2.0 (День 14):** client_quality ↑ (0.15→0.25), competition ↓ (0.15→0.10), timeline_fit ↓ (0.15→0.10). Формула `client_quality`: `hp * 0.7 + min(badges_n * 12, 50)`. Пороги понижены: apply ≥ 65 (было 80), review ≥ 55 (было 60).
-
 **Выход:** `logs/scorer_*.json`.
 
-### Шаг 4: Клиент-аналитик (`kwork-client-analyst`)
+### Шаг 4: Клиент-аналитик (`kwork_client_analyst.py`)
 
-Оценивает риск заказчика (`client.risk`) для проектов с вердиктом `apply` или `review`:
+Оценивает риск заказчика для проектов с вердиктом `apply` или `review`:
 
 - **low:** hired_percent ≥ 70, есть бейдж «Мощный покупатель» или «Более 3 лет с Kwork»
 - **high:** hired_percent < 30 или completed_projects < 3
@@ -236,28 +171,25 @@ python3 kwerk_run.py --live
 
 **Выход:** `logs/client_analyst_*.json`.
 
-### Шаг 5: Писатель КП (`kwork-proposal-writer`)
+### Шаг 5: Писатель КП (`kwork_proposal_writer.py`)
 
 Генерирует коммерческое предложение для проектов с `verdict=apply` и `risk≠high`.
 
 **Требования к КП:**
 - 400–1500 символов
 - Обращение по имени заказчика
-- Цена и срок (с запасом +1 день)
+- Цена и срок
 - Уточняющий вопрос в конце
-- Без спам-фраз (25+ запрещённых фраз)
 - Self-correction: до 2 итераций валидации
 
 **Выход:** `proposals/YYYY-MM-DD_kwork-{id}.md`.
 
-### Шаг 6: Хранитель истории (`kwork-history-keeper`)
+### Шаг 6: Хранитель истории (`kwork_history_keeper.py`)
 
 Атомарная запись: за **один вызов** пишет оба файла:
 
 - `data/history.json` — все обработанные проекты
 - `data/rejected.json` — только отклонённые (с причиной)
-
-Использует `temp → os.replace()` — POSIX-атомарно, риск рассинхрона исключён.
 
 ---
 
@@ -278,8 +210,8 @@ python3 tools/monitor_server.py
 | **Pipeline Graph** | Mermaid-диаграмма: 🟢 завершён, 🔵 выполняется, ⚪ ожидает, 🔴 ошибка |
 | **Метрики** | Всего проектов, Apply/Review/Skip, Avg Score, Бюджет (∑) |
 | **Шаги** | Список с таймингами и статусами |
-| **Проекты** | Таблица: ID, Название, Бюджет, Score, Verdict, Risk, 📄 КП |
-| **Логи** | stdout/stderr агентов |
+| **Проекты** | Таблица: ID, Название, Бюджет, Score, Verdict, Risk, КП |
+| **Логи** | stdout/stderr |
 | **Ошибки** | Список с описаниями |
 
 ### API
@@ -293,72 +225,35 @@ python3 tools/monitor_server.py
 | GET | `/api/proposal/{filename}` | Скачать .md КП |
 | GET | `/api/events` | SSE-поток (обновления каждые 0.5с) |
 
-### Команды write_status.py
-
-```bash
-# Инициализация
-python3 tools/write_status.py init --run-id 2026-06-09_12-00-00 --mode dry_run
-
-# Старт шага
-python3 tools/write_status.py start --step "parser(all)"
-
-# Финиш шага
-python3 tools/write_status.py finish --step "parser(all)" --summary "25 projects"
-
-# Метрики
-python3 tools/write_status.py metrics --total 25 --kept 23 --apply 0 --review 0 --skip 25 --avg-score 28.1
-
-# Добавить проект
-python3 tools/write_status.py project --id 3192454 --title "Telegram-бот" --budget 20000 --score 63 --verdict review
-
-# Ошибка
-python3 tools/write_status.py error --msg "Rate limit exceeded"
-
-# Сохранить запуск
-python3 tools/write_status.py save-run
-```
-
 ---
 
 ## Конфигурация
 
 ### `config/freelancer_profile.yaml`
 
-Центральный конфиг, определяющий поведение пайплайна. Изменение не требует правки промптов.
+Центральный конфиг. Изменение не требует правки кода.
 
 | Секция | Описание |
 |--------|----------|
-| `skills` | Навыки по категориям (indicators, tech_stack, adjacent, avoid) — v2.0 |
+| `skills` | Навыки по категориям (indicators, tech_stack, adjacent, avoid) |
 | `avoid_keywords` | Слова-триггеры для безусловного отклонения |
 | `avoid_red_flags` | Жёлтые флаги (проект идёт в review вместо apply) |
-| `preferences` | `min_hourly_rate`, `max_project_duration_days`, preferred_categories |
+| `preferences` | `min_hourly_rate`, `max_project_duration_days` |
 | `scoring_weights` | Веса 5 компонентов скора |
 | `thresholds` | Пороги apply/review/skip |
-| `budget_fit_thresholds` | Множители бюджетного скоринга |
-| `timeline_fit_thresholds` | Дни для скоринга срока |
-| `competition_thresholds` | Число откликов для скоринга конкуренции |
-| `client_quality_thresholds` | Условия low/medium/high risk |
-| `proposal` | Лимиты КП, стоп-фразы, шаблоны |
+| `proposal` | Лимиты КП, стоп-фразы |
 
-**Калибровка:** после live-прогонов анализируйте `data/rejected.json`. Если хорошие проекты массово отклоняются — снизьте `min_hourly_rate` или откалибруйте `scoring_weights`.
+**Калибровка:** анализируйте `data/rejected.json`. Если хорошие проекты массово отклоняются — снизьте `min_hourly_rate` или откалибруйте `scoring_weights`.
 
 ---
 
 ## Модели
 
-Все компоненты используют **free-tier** модели. Бюджет прогона: **$0.00**.
+Все компоненты используют **единую free-tier модель**. Бюджет прогона: **$0.00**.
 
 | Компонент | Модель | Провайдер |
 |-----------|--------|-----------|
-| **Build / Orchestrator** | `deepseek/deepseek-v4-flash-free` | DeepSeek |
-| **kwork-parser** | `nvidia/nemotron-3-ultra-free` | NVIDIA |
-| **kwork-analyzer** | `nvidia/nemotron-3-ultra-free` | NVIDIA |
-| **kwork-scorer** | `nvidia/nemotron-3-ultra-free` | NVIDIA |
-| **kwork-client-analyst** | `nvidia/nemotron-3-ultra-free` | NVIDIA |
-| **kwork-proposal-writer** | `deepseek/deepseek-v4-flash-free` | DeepSeek |
-| **kwork-history-keeper** | `minimax/minimax-m3-free` | MiniMax |
-
-> **Бюджет прогона: $0.00** — все модели free-tier. DeepSeek V4 Flash Free (аналог Sonnet) используется для генерации КП и оркестрации. Nemotron 3 Ultra Free — для парсинга и скоринга. MiniMax M3 Free — для атомарной записи (малый токен-расход).
+| **Все шаги 0-6** | `opencode/nemotron-3-ultra-free` | OpenCode |
 
 ---
 
@@ -366,185 +261,110 @@ python3 tools/write_status.py save-run
 
 ```
 opencode/
-├── prompts/                          # Системные промпты агентов
-│   ├── orchestrator.txt              #   Оркестратор (build agent)
-│   ├── parser.txt                    #   Парсер kwork.ru
-│   ├── analyzer.txt                  #   Фильтр + prelim score
-│   ├── scorer.txt                    #   Взвешенный скор 1-100
-│   ├── client-analyst.txt            #   Оценка риска заказчика
-│   ├── proposal-writer.txt           #   Генерация КП
-│   └── history-keeper.txt            #   Атомарная запись истории
-│
+├── kwork_run.py                     # Единая точка входа
+├── kwork_analyzer.py                # Анализ проектов
+├── kwork_scorer.py                  # Скоринг
+├── kwork_client_analyst.py          # Оценка рисков заказчиков
+├── kwork_proposal_writer.py         # Генерация КП
+├── kwork_history_keeper.py          # Сохранение истории
 ├── config/
-│   └── freelancer_profile.yaml       # Профиль: навыки, веса, пороги
-│
-├── data/                             # Данные (пишутся агентами)
-│   ├── history.json                  #   Все обработанные проекты
-│   └── rejected.json                 #   Отклонённые (с причинами)
-│
-├── proposals/                        # Сгенерированные КП
-│   └── 2026-06-09_kwork-900001.md    #   Пример КП
-│
-├── logs/                             # Логи прогонов
-│   ├── parser_live.json              #   Выход парсера (live)
-│   ├── analyzer_*.json               #   Выход анализатора
-│   ├── scorer_*.json                 #   Выход скорера
-│   ├── client_analyst_*.json         #   Выход клиент-аналитика
-│   ├── proposal_writer_*.json        #   Выход писателя КП
-│   ├── history_keeper_*.json         #   Выход хранителя истории
-│   ├── run_*.json                    #   Лог прогона (метаданные)
-│   ├── pipeline_status.json          #   Runtime статус (веб-монитор)
-│   └── runs/                         #   История запусков
-│
-├── tests/
-│   └── kwork-sample.html             # Тестовый HTML для dry-run
-│
-├── tools/                            # Утилиты
-│   ├── kwork_login.py                #   Авто-логин (Playwright, видимый Chrome)
-│   ├── kwork_live_parse.py           #   Live-парсер (Playwright)
-│   ├── monitor_server.py             #   Веб-монитор (FastAPI + SSE)
-│   ├── write_status.py               #   Утилита записи статуса
-│   └── README.md                     #   Документация tools/
-│
+│   └── freelancer_profile.yaml      # Профиль: навыки, веса, пороги
+├── data/
+│   ├── history.json                 # Все обработанные проекты
+│   └── rejected.json                # Отклонённые (с причинами)
+├── proposals/                       # Сгенерированные КП
+├── logs/                            # Логи прогонов
+│   ├── parser_live.json             # Выход парсера
+│   ├── analyzer_*.json
+│   ├── scorer_*.json
+│   ├── client_analyst_*.json
+│   ├── proposal_writer_*.json
+│   ├── history_keeper_*.json
+│   ├── pipeline_status.json         # Статус для веб-монитора
+│   └── runs/                        # История запусков
+├── tools/
+│   ├── kwork_live_parse.py          # Парсер (Playwright)
+│   ├── kwork_check_auth.py          # Проверка/выполнение входа
+│   ├── monitor_server.py            # Веб-монитор (FastAPI + SSE)
+│   └── write_status.py              # Утилита записи статуса
 ├── templates/
-│   └── monitor.html                  # HTMX-фронтенд веб-монитора
-│
-├── .opencode/
-│   └── skills/kwork-pipeline/
-│       └── SKILL.md                  # Skill-регистрация (@kwork-pipeline)
-│
-├── kwerk_run.py                     # Единая точка входа (главная команда)
-│
-├── opencode.json                     # Конфиг агентов + least privilege
-├── CONTRACT.md                       # JSON-контракт v2.1
-├── AGENT_SYSTEM_OPENCODE_V2.md       # Дизайн-док (архитектура)
-├── AGENTS.md                         # Hard rules и контекст
-├── requirements.txt                  # Зависимости Python
-├── .env.example                      # Пример .env (legacy)
-├── .gitignore
-└── README.md                         # Этот файл
+│   └── monitor.html                 # HTMX-фронтенд веб-монитора
+├── prompts/                         # Системные промпты
+├── opencode.json                    # Конфиг агентов
+├── CONTRACT.md                      # JSON-контракт v2.1
+├── AGENT_SYSTEM_OPENCODE_V2.md      # Дизайн-док
+├── AGENTS.md                        # Hard rules
+├── requirements.txt
+├── cookies.txt                      # Сессионные cookies kwork.ru
+└── README.md
 ```
 
 ---
 
 ## Примеры использования
 
-### Dry-run (без интернета)
-
 ```bash
-python3 kwerk_run.py
-```
+# Запустить полный пайплайн:
+python3 kwork_run.py
 
-Использует `tests/kwork-sample.html` как источник данных. Весь пайплайн проходит за секунды.
+# Запустить с очисткой истории:
+python3 kwork_run.py --clear
 
-### Live-прогон (реальные проекты)
+# Запустить с ограничением проектов:
+python3 kwork_run.py --max-projects 5
 
-```bash
-python3 kwerk_run.py --live
-```
-
-Требует `cookies.txt`. Если файла нет — запустите `python3 tools/kwork_login.py`.
-
-### Ограничение числа проектов
-
-```bash
-python3 kwerk_run.py --max-projects 5
-```
-
-Обработать только первые 5 проектов после парсера.
-
-### Очистка истории
-
-```bash
-python3 kwerk_run.py --live --clear
-```
-
-Очищает `data/history.json` и `data/rejected.json` перед прогоном.
-
-### Веб-монитор + пайплайн
-
-```bash
-# Терминал 1:
+# Запустить веб-монитор в отдельном терминале:
 python3 tools/monitor_server.py
 # → http://localhost:8080
-
-# Терминал 2:
-python3 kwerk_run.py --live
 ```
 
 ---
 
 ## Решение проблем
 
-### «cookies.txt не найден»
+### «cookies.txt не найден» / авторизация не выполнена
 
 ```bash
-# Запустить авто-логин
-python3 tools/kwork_login.py
-# Откроется Chrome, войдите в kwork.ru, скрипт сам сохранит cookies
+# Запустить вход:
+python3 tools/kwork_check_auth.py
+# Откроется Chrome, введите логин/пароль
 ```
 
 ### 100% проектов получают skip
 
-Причина: `min_hourly_rate: 500` в `config/freelancer_profile.yaml` может быть высок для реальных бюджетов kwork.ru (медиана ~100–200 ₽/ч).
-
-**Решение:** снизить порог:
+Причина: `min_hourly_rate: 500` может быть высок. Снизить порог:
 ```yaml
 # config/freelancer_profile.yaml
 preferences:
-  min_hourly_rate: 200   # было 500
+  min_hourly_rate: 200
 ```
 
 ### Проект отклонился, хотя подходит
 
 Проверьте `data/rejected.json` — там указана причина:
-- `low_score` — не хватило скора (калибруйте веса)
-- `avoid_keyword:*` — сработал стоп-слово
-- `avoid_skill:*` — проект подходит под avoid-навык
+- `low_score` — не хватило скора
+- `avoid_keyword:*` — сработало стоп-слово
 - `duplicate` — уже в history.json
-
-### Web-монитор не показывает данные
-
-```bash
-# Проверить, запущен ли сервер
-pgrep -a -f monitor_server
-
-# Проверить наличие файла статуса
-cat logs/pipeline_status.json
-
-# Если порт 8080 занят
-# → измените port в tools/monitor_server.py
-```
 
 ### Playwright: «DISPLAY не задан»
 
 На headless-сервере без GUI:
 ```bash
-xvfb-run python3 tools/kwork_login.py
+xvfb-run python3 tools/kwork_live_parse.py all
 ```
-
-### Ошибка модели: rate limit
-
-Free-tier модели имеют ограничения RPM/TPM. Пайплайн автоматически делает `sleep` между вызовами и retry с backoff (5с → 15с → 60с). Если всё равно превышен — пайплайн продолжается с тем, что есть (graceful degradation).
 
 ---
 
 ## Безопасность
 
-### Критические правила
-
 1. **`cookies.txt` = сессионный пароль kwork.ru.** Хранить только в корне проекта. В `.gitignore`. Права `chmod 600`.
 2. **Никогда не выводить** содержимое `cookies.txt` или `.env` в логи, чаты, отчёты.
-3. **Только `kwork-parser`** имеет право читать `cookies.txt`. Оркестратор и все остальные агенты — `deny`.
-4. **Least privilege:** каждый агент имеет минимум прав (см. `opencode.json`).
+3. **Least privilege:** каждый скрипт имеет минимум прав (см. `opencode.json`).
 
 ### Проверка
 
 ```bash
-# Проверить, что cookies.txt не закоммитится
 git check-ignore cookies.txt   # → выводит cookies.txt (если в .gitignore)
-
-# Права доступа
 ls -la cookies.txt              # → -rw------- (chmod 600)
 ```
 
@@ -554,17 +374,11 @@ ls -la cookies.txt              # → -rw------- (chmod 600)
 
 | Документ | Описание |
 |----------|----------|
-| [AGENT_SYSTEM_OPENCODE_V2.md](AGENT_SYSTEM_OPENCODE_V2.md) | Полный дизайн-док (779 строк) |
-| [CONTRACT.md](CONTRACT.md) | JSON-контракт v2.1 (489 строк) |
+| [AGENT_SYSTEM_OPENCODE_V2.md](AGENT_SYSTEM_OPENCODE_V2.md) | Полный дизайн-док |
+| [CONTRACT.md](CONTRACT.md) | JSON-контракт v2.1 |
 | [AGENTS.md](AGENTS.md) | Hard rules и контекст |
 | [tools/README.md](tools/README.md) | Документация утилит |
 
 ---
 
-## Лицензия
-
-Учебный проект. Все права на kwork.ru принадлежат ООО «Кворк».
-
----
-
-*Создано с использованием OpenCode, FastAPI, Playwright, HTMX и free-tier AI-моделей (NVIDIA Nemotron 3 Ultra Free).*
+*Создано с использованием OpenCode, Playwright, FastAPI, HTMX и opencode/nemotron-3-ultra-free.*

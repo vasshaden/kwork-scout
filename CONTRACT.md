@@ -264,21 +264,20 @@
 ## 9. `metadata` (Orchestrator)
 
 ```json
-"metadata": {
-  "processing_time_sec": 35,
-  "model_calls": { "haiku": 5, "sonnet": 1 },
-  "estimated_cost_usd": 0.08,
-  "agents_run": ["parser", "analyzer", "scorer", "client-analyst", "proposal-writer"],
-  "errors": []
-}
+  "metadata": {
+    "processing_time_sec": 35,
+    "model_calls": { "nemotron-3-ultra-free": 6 },
+    "estimated_cost_usd": 0.0,
+    "agents_run": ["parser", "analyzer", "scorer", "client-analyst", "proposal-writer"],
+    "errors": []
+  }
 ```
 
 | Поле | Тип | Обязательно | Описание |
 |------|-----|-------------|----------|
 | `processing_time_sec` | int | ✓ | Полное время обработки проекта |
-| `model_calls.haiku` | int | ✓ | Число вызовов Haiku (все субагента кроме writer/orchestrator) |
-| `model_calls.sonnet` | int | ✓ | Число вызовов Sonnet (writer + orchestrator) |
-| `estimated_cost_usd` | number | ✓ | Грубая оценка (для лимита $0.12 на 10 проектов) |
+| `model_calls.nemotron-3-ultra-free` | int | ✓ | Число вызовов единой free-tier модели для всех 7 агентов |
+| `estimated_cost_usd` | number | ✓ | Грубая оценка (всегда $0.00 на free tier) |
 | `agents_run` | list of string | ✓ | Список агентов, которых проект прошёл |
 | `errors` | list of {agent, message} | ✓ (default `[]`) | Некритичные ошибки (пайплайн не упал) |
 
@@ -372,8 +371,8 @@
 
   "metadata": {
     "processing_time_sec": 35,
-    "model_calls": {"haiku": 5, "sonnet": 1},
-    "estimated_cost_usd": 0.08,
+    "model_calls": {"nemotron-3-ultra-free": 6},
+    "estimated_cost_usd": 0.0,
     "agents_run": ["parser", "analyzer", "scorer", "client-analyst", "proposal-writer"],
     "errors": []
   }
@@ -459,5 +458,5 @@
 
 - **Дизайн-док** (источник архитектуры): `AGENT_SYSTEM_OPENCODE_V2.md`.
 - **Профиль** (источник навыков/порогов): `config/freelancer_profile.yaml`.
-- **Тестовая фикстура**: `tests/kwork-sample.html` (реалистичный формат).
+- **Live-данные**: `logs/parser_live.json` (реальный формат kwork.ru через stateData).
 - **AGENTS.md** (правила для AI-агентов): жёсткие правила, в т.ч. про секреты.

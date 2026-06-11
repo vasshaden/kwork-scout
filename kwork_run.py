@@ -1,27 +1,18 @@
 #!/usr/bin/env python3
 """
-kwerk_run.py — Единая точка входа для Kwork Scout v2.1.
+kwork_run.py — Единая точка входа для Kwork Scout v2.1.
 
-Запускает полный пайплайн: parser → analyzer → scorer → client-analyst →
-proposal-writer → history-keeper → markdown-отчёт.
+Запускает полный live-пайплайн: check-auth → parser → analyzer → scorer →
+client-analyst → proposal-writer → history-keeper → markdown-отчёт.
 
 Использование:
-  # Dry-run (тестовый HTML, без интернета)
-  python3 kwerk_run.py
-
-  # Live (реальные проекты с kwork.ru)
-  python3 kwerk_run.py --live
-
-  # Live + очистить историю
-  python3 kwerk_run.py --live --clear
-
-  # Dry-run + не больше 5 проектов
-  python3 kwerk_run.py --max-projects 5
+  python3 kwork_run.py                  # Запуск с реальными данными
+  python3 kwork_run.py --clear          # + очистить историю перед запуском
+  python3 kwork_run.py --max-projects 5 # + ограничить число проектов
 
 После прогона открой http://localhost:8080 — монитор покажет все проекты.
 """
 import argparse
-import json
 import json
 import subprocess
 import sys
@@ -34,7 +25,6 @@ PY = sys.executable
 LOGS = ROOT / "logs"
 DATA = ROOT / "data"
 REPORTS = ROOT / "reports"
-PROPOSALS = ROOT / "proposals"
 TIMEOUT = 120  # секунд на шаг
 
 
@@ -63,13 +53,11 @@ def run(cmd, description="", timeout=TIMEOUT):
 
 def step_wrapper(step_name, cmd, description, timeout=TIMEOUT):
     """Запускает шаг и пишет статус в pipeline_status."""
-    # start
     subprocess.run(
         [PY, str(ROOT / "tools" / "write_status.py"), "start", "--step", step_name],
         capture_output=True, timeout=10
     )
     ok, stdout, stderr, dur = run(cmd, description, timeout)
-    # finish / fail
     subprocess.run(
         [PY, str(ROOT / "tools" / "write_status.py"),
          "finish" if ok else "fail",
@@ -82,7 +70,7 @@ def step_wrapper(step_name, cmd, description, timeout=TIMEOUT):
 
 
 def import_projects_to_monitor():
-    """Импортирует проекты из последнего scorer в pipeline_status."""
+    """Импортирует проекты в pipeline_status."""
     subprocess.run(
         [PY, str(ROOT / "tools" / "write_status.py"), "import-projects"],
         capture_output=True, timeout=15
@@ -92,27 +80,27 @@ def import_projects_to_monitor():
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Kwork Scout — единый пайплайн",
+        description="Kwork Scout — live-пайплайн",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Примеры:\n"
-            "  python3 kwerk_run.py              # dry-run\n"
-            "  python3 kwerk_run.py --live        # live-парсинг\n"
-            "  python3 kwerk_run.py --live --clear  # live + очистить историю\n"
-            "  python3 kwerk_run.py --max-projects 3  # только 3 проекта\n"
+            "  python3 kwork_run.py              # стандартный запуск\n"
+            "  python3 kwork_run.py --clear       # + очистить историю\n"
+            "  python3 kwork_run.py --max-projects 5  # + ограничить проекты\n"
         )
     )
-    ap.add_argument("--live", action="store_true", help="Live-режим (реальные проекты с kwork.ru)")
-    ap.add_argument("--clear", action="store_true", help="Очистить data/history.json + data/rejected.json перед стартом")
-    ap.add_argument("--max-projects", type=int, default=0, help="Максимум проектов после парсера")
+    ap.add_argument("--clear", action="store_true",
+                    help="Очистить data/history.json + data/rejected.json перед стартом")
+    ap.add_argument("--max-projects", type=int, default=0,
+                    help="Максимум проектов после парсера")
     args = ap.parse_args()
 
     started_at = datetime.now(timezone.utc)
     ts = started_at.strftime("%Y-%m-%d_%H-%M-%S")
-    run_id = f"{'live' if args.live else 'dry'}_{ts}"
+    run_id = f"live_{ts}"
 
     print("=" * 60)
-    print(f"  Kwork Scout — {'LIVE' if args.live else 'DRY'} RUN")
+    print(f"  Kwork Scout — LIVE RUN")
     print(f"  Run ID: {run_id}")
     print(f"  Max projects: {'∞' if not args.max_projects else args.max_projects}")
     print("=" * 60)
@@ -120,13 +108,11 @@ def main():
     # ------------------------------------------------------------------
     # PREP
     # ------------------------------------------------------------------
-    # Очистка data/
     if args.clear:
         for p in (DATA / "history.json", DATA / "rejected.json"):
             if p.exists():
                 p.unlink()
                 print(f"  🗑  Удалён {p.name}")
-        # также удаляем parser_live.json и старые промежуточные логи
         for f in [LOGS / "parser_live.json"]:
             if f.exists():
                 f.unlink()
@@ -140,71 +126,48 @@ def main():
     subprocess.run(
         [PY, str(ROOT / "tools" / "write_status.py"), "init",
          "--run-id", run_id,
-         "--mode", "live" if args.live else "dry_run",
+         "--mode", "live",
          "--categories", "telegram_bots,microservices,content_creation"],
         capture_output=True, timeout=10
     )
     print("  ✅ Monitor initialised")
 
     steps_ok = 0
-    steps_total = 6
+    steps_total = 7
+
+    # ------------------------------------------------------------------
+    # STEP 0: CHECK AUTH
+    # ------------------------------------------------------------------
+    print("\n[0/7] Check auth")
+    auth_ok, *_ = step_wrapper(
+        "check-auth",
+        [PY, str(ROOT / "tools" / "kwork_check_auth.py")],
+        "Проверка авторизации на kwork.ru",
+        timeout=600
+    )
+    if not auth_ok:
+        print("  ❌ Авторизация не выполнена. Пайплайн остановлен.")
+        print("  Запустите python3 tools/kwork_check_auth.py для входа.")
+        sys.exit(1)
+    steps_ok += 1
 
     # ------------------------------------------------------------------
     # STEP 1: PARSER
     # ------------------------------------------------------------------
-    print("\n[1/6] Parser")
-    if args.live:
-        parser_cmd = [PY, str(ROOT / "tools" / "kwork_live_parse.py"), "all", "--max-pages", "1"]
-        if args.max_projects:
-            parser_cmd.extend(["--max-projects", str(args.max_projects)])
-        ok, *_ = step_wrapper("parser(live)", parser_cmd, "Парсинг kwork.ru (live)")
-    else:
-        # Dry-run: читаем tests/kwork-sample.html
-        ok, *_ = step_wrapper("parser(dry)", [PY, str(ROOT / "simulate_parser_dry_run.py")], "Парсинг из fixture")
-        # Сливаем parser_dry_*.json в parser_live.json (анализатор читает только parser_live.json)
-        dry_files = sorted(LOGS.glob("parser_dry_*.json"))
-        if dry_files:
-            all_projects = []
-            for f in dry_files:
-                try:
-                    data = json.loads(f.read_text(encoding="utf-8"))
-                    projects = data.get("projects", [])
-                    # Добавляем категорию из имени файла
-                    cat = f.stem.replace("parser_dry_", "")
-                    for p in projects:
-                        if "categories" not in p.get("project", {}):
-                            if "project" in p:
-                                p["project"]["categories"] = [cat]
-                        all_projects.append(p)
-                except Exception:
-                    pass
-            # Дедуп по project.id
-            seen = set()
-            deduped = []
-            for p in all_projects:
-                pid = (p.get("project") or {}).get("id")
-                if pid and pid not in seen:
-                    seen.add(pid)
-                    deduped.append(p)
-            live = {
-                "_schema_version": "2.1",
-                "_dry_run": True,
-                "_pipeline_stage": "parser",
-                "projects": deduped,
-            }
-            (LOGS / "parser_live.json").write_text(
-                json.dumps(live, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            print(f"    → parser_live.json создан из {len(dry_files)} dry-файлов ({len(deduped)} проектов)")
+    print("\n[1/7] Parser")
+    parser_cmd = [PY, str(ROOT / "tools" / "kwork_live_parse.py"), "all", "--max-pages", "3"]
+    if args.max_projects:
+        parser_cmd.extend(["--max-projects", str(args.max_projects)])
+    ok, *_ = step_wrapper("parser(live)", parser_cmd, "Парсинг kwork.ru")
     if ok:
         steps_ok += 1
 
     # ------------------------------------------------------------------
     # STEP 2: ANALYZER
     # ------------------------------------------------------------------
-    print("\n[2/6] Analyzer")
+    print("\n[2/7] Analyzer")
     ok, *_ = step_wrapper("analyzer",
-                           [PY, str(ROOT / "simulate_analyzer_dry_run.py"), "--skip-history"],
+                           [PY, str(ROOT / "kwork_analyzer.py"), "--skip-history"],
                            "Анализ проектов")
     if ok:
         steps_ok += 1
@@ -212,9 +175,9 @@ def main():
     # ------------------------------------------------------------------
     # STEP 3: SCORER
     # ------------------------------------------------------------------
-    print("\n[3/6] Scorer")
+    print("\n[3/7] Scorer")
     ok, *_ = step_wrapper("scorer",
-                           [PY, str(ROOT / "simulate_scorer_dry_run.py")],
+                           [PY, str(ROOT / "kwork_scorer.py")],
                            "Скоринг проектов")
     if ok:
         steps_ok += 1
@@ -222,9 +185,9 @@ def main():
     # ------------------------------------------------------------------
     # STEP 4: CLIENT-ANALYST
     # ------------------------------------------------------------------
-    print("\n[4/6] Client Analyst")
+    print("\n[4/7] Client Analyst")
     ok, *_ = step_wrapper("client-analyst",
-                           [PY, str(ROOT / "simulate_client_analyst_dry_run.py")],
+                           [PY, str(ROOT / "kwork_client_analyst.py")],
                            "Оценка рисков заказчиков")
     if ok:
         steps_ok += 1
@@ -232,9 +195,9 @@ def main():
     # ------------------------------------------------------------------
     # STEP 5: PROPOSAL-WRITER
     # ------------------------------------------------------------------
-    print("\n[5/6] Proposal Writer")
+    print("\n[5/7] Proposal Writer")
     ok, *_ = step_wrapper("proposal-writer",
-                           [PY, str(ROOT / "simulate_proposal_writer_dry_run.py")],
+                           [PY, str(ROOT / "kwork_proposal_writer.py")],
                            "Генерация КП")
     if ok:
         steps_ok += 1
@@ -242,15 +205,15 @@ def main():
     # ------------------------------------------------------------------
     # STEP 6: HISTORY-KEEPER
     # ------------------------------------------------------------------
-    print("\n[6/6] History Keeper")
+    print("\n[6/7] History Keeper")
     ok, *_ = step_wrapper("history-keeper",
-                           [PY, str(ROOT / "simulate_history_keeper_dry_run.py")],
+                           [PY, str(ROOT / "kwork_history_keeper.py")],
                            "Атомарное сохранение истории")
     if ok:
         steps_ok += 1
 
     # ------------------------------------------------------------------
-    # Импортируем проекты в монитор (после всех шагов — есть и risk, и КП)
+    # IMPORT PROJECTS TO MONITOR
     # ------------------------------------------------------------------
     print("\n  → Importing projects to monitor...")
     import_projects_to_monitor()
@@ -258,7 +221,6 @@ def main():
     # ------------------------------------------------------------------
     # FINALISE
     # ------------------------------------------------------------------
-    # Сохраняем копию в logs/runs/
     subprocess.run(
         [PY, str(ROOT / "tools" / "write_status.py"), "save-run"],
         capture_output=True, timeout=10
@@ -273,7 +235,7 @@ def main():
     print(f"  📊 Монитор: http://localhost:8080")
     print("=" * 60)
 
-    # Вывод сводки
+    # Сводка
     print()
     history_path = DATA / "history.json"
     if history_path.exists():
@@ -294,13 +256,13 @@ def main():
         except Exception:
             pass
 
-    # Генерация markdown-отчёта
+    # Markdown-отчёт
     try:
         report_path = REPORTS / f"RUN_{run_id}.md"
         md_lines = [
             f"# Kwork Scout — отчёт от {started_at.strftime('%Y-%m-%d %H:%M')}",
             "",
-            f"**Режим:** {'live' if args.live else 'dry_run'}",
+            f"**Режим:** live",
             f"**Run ID:** {run_id}",
             f"**Время:** {total_dur}с",
             f"**Шаги:** {steps_ok}/{steps_total}",
@@ -321,7 +283,6 @@ def main():
                 md_lines.append(f"| **Всего** | **{len(entries)}** |")
                 md_lines.append("")
 
-                # Таблица проектов
                 md_lines.append("## Проекты")
                 md_lines.append("")
                 md_lines.append("| ID | Название | Бюджет | Score | Verdict | Risk | Статус |")

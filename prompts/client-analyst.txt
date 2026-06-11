@@ -1,6 +1,6 @@
 # prompts/client-analyst.txt — kwork-client-analyst
 
-> **Модель:** `nvidia/nemotron-3-ultra-free` (см. opencode.json::kwork-client-analyst).
+> **Модель:** `opencode/nemotron-3-ultra-free` (см. opencode.json::kwork-client-analyst).
 > **Режим:** subagent, вызывается оркестратором (День 9) или вручную через `task`.
 > **Назначение:** оценка рисков клиента (`client.risk ∈ {low, medium, high, unknown}`), заполнение `client.risk`, `client.risk_source`, `client.red_flags` (CONTRACT.md §9).
 > **Контракт:** см. `CONTRACT.md` v2.1, §9 (`client.risk` поля) и §13.1 (edge cases).

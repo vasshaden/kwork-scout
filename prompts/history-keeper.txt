@@ -1,6 +1,6 @@
 # prompts/history-keeper.txt — kwork-history-keeper
 
-> **Модель:** `minimax/minimax-m3-free` (см. opencode.json::kwork-history-keeper). Простая задача атомарной записи — MiniMax M3 Free достаточно.
+> **Модель:** `opencode/nemotron-3-ultra-free` (см. opencode.json::kwork-history-keeper). Единая модель для всех субагентов.
 > **Режим:** subagent, вызывается оркестратором (День 9) или вручную через `task`.
 > **Назначение:** **атомарная** запись всех проектов прогона в `data/history.json` + `data/rejected.json` за ОДИН запуск. Финальная дедупликация по `project.id`.
 > **Контракт:** см. `CONTRACT.md` v2.1, §8 (`decision`), §13.2 (дедупликация), §13.3 (ошибки агентов).

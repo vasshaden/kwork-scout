@@ -113,7 +113,7 @@
       </div>
       <div class="metric-card">
         <div class="metric-value text-emerald-400" id="m-cost">$0.00</div>
-        <div class="metric-label">Бюджет</div>
+        <div class="metric-label">Бюджет КП</div>
       </div>
     </div>
 
@@ -304,9 +304,14 @@
     document.getElementById('m-skip').textContent    = agg.skip ?? 0;
     document.getElementById('m-score').textContent   = agg.avg_score != null ? agg.avg_score.toFixed(1) : '—';
 
-    // Total budget (sum of all project budgets in RUB)
-    const totalBudget = (data.projects || []).reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
-    document.getElementById('m-cost').textContent = totalBudget.toLocaleString('ru-RU') + ' ₽';
+    // Total budget of projects with КП (proposal_path != null)
+    const budgetKp = (data.projects || []).reduce((sum, p) => {
+      if (p.proposal_path) {
+        return sum + (Number(p.budget) || 0);
+      }
+      return sum;
+    }, 0);
+    document.getElementById('m-cost').textContent = budgetKp.toLocaleString('ru-RU') + ' ₽';
 
     // Steps
     renderSteps(data.steps || []);

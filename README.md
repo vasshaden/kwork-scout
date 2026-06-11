@@ -105,6 +105,8 @@ python3 kwork_run.py --max-projects 5
 # Терминал: запустить монитор
 python3 tools/monitor_server.py
 # → http://localhost:8080
+
+# Остановить: Ctrl+C в терминале
 ```
 
 ---
@@ -199,6 +201,7 @@ python3 tools/monitor_server.py
 
 ```bash
 python3 tools/monitor_server.py
+# Остановить: Ctrl+C
 ```
 
 Открывает `http://localhost:8080` с дашбордом.
@@ -316,6 +319,7 @@ python3 kwork_run.py --max-projects 5
 # Запустить веб-монитор в отдельном терминале:
 python3 tools/monitor_server.py
 # → http://localhost:8080
+# Остановить: Ctrl+C в терминале монитора
 ```
 
 ---

@@ -172,13 +172,17 @@ async def api_events():
 
     async def event_generator():
         nonlocal last_hash
-        while True:
-            current_hash = _hash_file(STATUS_FILE)
-            if current_hash and current_hash != last_hash:
-                last_hash = current_hash
-                status = _read_status()
-                yield f"data: {json.dumps(status, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(0.5)
+        try:
+            while True:
+                current_hash = _hash_file(STATUS_FILE)
+                if current_hash and current_hash != last_hash:
+                    last_hash = current_hash
+                    status = _read_status()
+                    yield f"data: {json.dumps(status, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            # Server is shutting down — exit cleanly, no traceback
+            pass
 
     return StreamingResponse(
         event_generator(),
@@ -230,7 +234,8 @@ def main():
     print(f"[Monitor] Runs dir: {RUNS_DIR}")
     print(f"[Monitor] Press Ctrl+C to stop")
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info",
+                timeout_graceful_shutdown=3)
 
 
 if __name__ == "__main__":

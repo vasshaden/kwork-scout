@@ -156,11 +156,21 @@ def main():
     # ------------------------------------------------------------------
     print("\n[1/7] Parser")
     parser_cmd = [PY, str(ROOT / "tools" / "kwork_live_parse.py"), "all", "--max-pages", "3"]
-    if args.max_projects:
-        parser_cmd.extend(["--max-projects", str(args.max_projects)])
     ok, *_ = step_wrapper("parser(live)", parser_cmd, "Парсинг kwork.ru")
     if ok:
         steps_ok += 1
+        # Фильтр проектов по --max-projects (если указан)
+        if args.max_projects:
+            parser_out = LOGS / "parser_live.json"
+            if parser_out.exists():
+                import json as _json
+                data = _json.loads(parser_out.read_text(encoding="utf-8"))
+                projects = data.get("projects", [])
+                if len(projects) > args.max_projects:
+                    data["projects"] = projects[:args.max_projects]
+                    data["_batch"]["count"] = len(data["projects"])
+                    parser_out.write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                    print(f"    → Ограничено до {args.max_projects} проектов")
 
     # ------------------------------------------------------------------
     # STEP 2: ANALYZER

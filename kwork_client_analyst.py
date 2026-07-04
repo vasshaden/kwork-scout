@@ -26,6 +26,7 @@ def load_scorer_data():
     # Собираем все проекты из всех файлов, дедуп по id
     seen = set()
     projects = []
+    batch_info = {"input_count": 0}
     for f in files:
         d = json.loads(f.read_text(encoding="utf-8"))
         for c in d.get("projects", []):
@@ -33,7 +34,11 @@ def load_scorer_data():
             if pid not in seen:
                 seen.add(pid)
                 projects.append(c)
-    return {"projects": projects}
+                batch_info["input_count"] += 1
+        # Берём batch-статистику из первого файла
+        if "_batch" in d and not batch_info.get("apply_count"):
+            batch_info.update(d["_batch"])
+    return {"projects": projects, "_batch": batch_info}
 
 
 def load_yaml():
